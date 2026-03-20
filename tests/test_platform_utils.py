@@ -62,7 +62,9 @@ class TestExecutableDiscovery:
         assert result is None
 
     def test_which_all(self):
-        result = which_all("ls")
+        # Use a command that exists on all platforms
+        cmd = "python3" if which("python3") else "python"
+        result = which_all(cmd)
         assert isinstance(result, list)
         assert len(result) >= 1
 
