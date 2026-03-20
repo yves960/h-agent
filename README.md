@@ -4,6 +4,17 @@ OpenAI-powered coding agent harness with modular architecture.
 
 *"时间不在于你拥有多少，而在于你如何使用。"*
 
+## 📖 用户指南目录
+
+- [第一章：5 分钟快速开始](USER_GUIDE.md#第一章5-分钟快速开始) - 安装、配置、首次对话
+- [第二章：日常使用（单 agent 对话）](USER_GUIDE.md#第二章日常使用单-agent-对话) - 会话管理、历史查看、记忆系统  
+- [第三章：多 Agent 协作](USER_GUIDE.md#第三章多-agent-协作) - 团队模式、任务分配、状态监控
+- [第四章：技能系统（Skill）](USER_GUIDE.md#第四章技能系统skill) - 内置技能、安装新技能、创建自定义技能
+- [第五章：MCP 工具](USER_GUIDE.md#第五章mcp-工具) - Web 自动化、Token 免登录、自定义 MCP 配置
+- [第六章：高级配置](USER_GUIDE.md#第六章高级配置) - 多模型切换、Agent 模板、离线部署、性能调优
+
+> 💡 **新手推荐**：从[第一章：5 分钟快速开始](USER_GUIDE.md#第一章5-分钟快速开始)开始，然后根据需求跳转到对应章节。
+
 ---
 
 ## 安装
