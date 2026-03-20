@@ -39,6 +39,24 @@ from h_agent.session.manager import SessionManager
 
 
 # ============================================================
+# Init / Wizard
+# ============================================================
+
+def cmd_init(args) -> int:
+    """Handle init command - interactive setup wizard."""
+    from h_agent.cli.init_wizard import run_wizard, run_wizard_quick
+    if args.quick:
+        return run_wizard_quick()
+    return run_wizard()
+
+
+def cmd_config_wizard(args) -> int:
+    """Handle config --wizard command."""
+    from h_agent.cli.init_wizard import run_wizard
+    return run_wizard()
+
+
+# ============================================================
 # Daemon Control
 # ============================================================
 
@@ -47,13 +65,13 @@ def daemon_status() -> dict:
     pid_file = Path(PID_FILE)
     if not pid_file.exists():
         return {"running": False}
-    
+
     try:
         with open(pid_file) as f:
             data = json.load(f)
         pid = data.get("pid", 0)
         port = data.get("port", DAEMON_PORT)
-        
+
         # Check if process is alive
         os.kill(pid, 0)
         return {"running": True, "pid": pid, "port": port}
@@ -72,7 +90,7 @@ def start_daemon():
     if status.get("running"):
         print(f"Daemon already running (PID: {status['pid']}, Port: {status['port']})")
         return 0
-    
+
     # Start daemon as subprocess
     proc = subprocess.Popen(
         [sys.executable, "-m", "h_agent.daemon.server"],
@@ -80,7 +98,7 @@ def start_daemon():
         stderr=subprocess.DEVNULL,
         start_new_session=True
     )
-    
+
     # Wait for daemon to start
     for _ in range(20):
         time.sleep(0.25)
@@ -88,7 +106,7 @@ def start_daemon():
         if new_status.get("running"):
             print(f"Daemon started (PID: {new_status['pid']}, Port: {new_status['port']})")
             return 0
-    
+
     print("Failed to start daemon (timeout)")
     return 1
 
@@ -104,7 +122,7 @@ def stop_daemon():
         except OSError:
             pass
         return 0
-    
+
     try:
         os.kill(status["pid"], signal.SIGTERM)
         time.sleep(0.5)
@@ -125,7 +143,7 @@ def cmd_status(args) -> int:
     status = daemon_status()
     if status.get("running"):
         print(f"Daemon running (PID: {status['pid']}, Port: {status['port']})")
-        
+
         # Try to get more info via client
         try:
             from h_agent.daemon.client import DaemonClient
@@ -161,11 +179,11 @@ def cmd_session_list(args) -> int:
     """Handle session list command."""
     mgr = get_session_manager()
     sessions = mgr.list_sessions()
-    
+
     if not sessions:
         print("No sessions found")
         return 0
-    
+
     current = mgr.get_current()
     print(f"Sessions ({len(sessions)}):")
     for s in sessions:
@@ -190,7 +208,7 @@ def cmd_session_history(args) -> int:
     """Handle session history command."""
     mgr = get_session_manager()
     session_id = args.session_id
-    
+
     # Find session
     session = mgr.get_session(session_id)
     if not session:
@@ -200,15 +218,15 @@ def cmd_session_history(args) -> int:
                 session = s
                 session_id = s["session_id"]
                 break
-    
+
     if not session:
         print(f"Session not found: {session_id}")
         return 1
-    
+
     history = mgr.get_history(session_id)
     print(f"History for {session_id} ({len(history)} messages):")
     print("-" * 60)
-    
+
     for msg in history:
         role = msg.get("role", "?")
         content = msg.get("content", "")
@@ -216,7 +234,7 @@ def cmd_session_history(args) -> int:
             content = content[:200] + "..."
         print(f"\n[{role.upper()}]")
         print(content)
-    
+
     return 0
 
 
@@ -224,7 +242,7 @@ def cmd_session_delete(args) -> int:
     """Handle session delete command."""
     mgr = get_session_manager()
     session_id = args.session_id
-    
+
     # Find session
     session = mgr.get_session(session_id)
     if not session:
@@ -234,11 +252,11 @@ def cmd_session_delete(args) -> int:
                 session = s
                 session_id = s["session_id"]
                 break
-    
+
     if not session:
         print(f"Session not found: {session_id}")
         return 1
-    
+
     if mgr.delete_session(session_id):
         print(f"Deleted: {session_id}")
         return 0
@@ -252,13 +270,13 @@ def cmd_session_delete(args) -> int:
 def cmd_run(args) -> int:
     """Handle run command - single prompt execution."""
     from openai import OpenAI
-    
+
     prompt = args.prompt
     session_id = args.session
-    
+
     # Get or create session
     mgr = get_session_manager()
-    
+
     if session_id:
         # Try to find by name first
         session = mgr.get_session(session_id)
@@ -268,7 +286,7 @@ def cmd_run(args) -> int:
                     session_id = s["session_id"]
                     session = s
                     break
-        
+
         if not session:
             print(f"Session not found: {session_id}")
             return 1
@@ -279,23 +297,23 @@ def cmd_run(args) -> int:
             session_id = session["session_id"]
         else:
             session_id = mgr.get_current()
-    
+
     mgr.set_current(session_id)
-    
+
     # Load history
     messages = mgr.get_history(session_id)
-    
+
     # Add user message
     messages.append({"role": "user", "content": prompt})
     mgr.add_message(session_id, "user", prompt)
-    
+
     # Build messages for API
     system_prompt = f"You are a helpful AI assistant. Current directory: {os.getcwd()}"
     api_messages = [{"role": "system", "content": system_prompt}] + messages
-    
+
     # Run agent loop
     client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
-    
+
     while True:
         try:
             response = client.chat.completions.create(
@@ -305,61 +323,61 @@ def cmd_run(args) -> int:
                 tool_choice="auto",
                 max_tokens=4096,
             )
-            
+
             message = response.choices[0].message
-            
+
             if message.content:
                 print(message.content)
-            
+
             # Add assistant message to history
             content = message.content or ""
             tool_calls = message.tool_calls
-            
+
             mgr.add_message(session_id, "assistant", content)
-            
+
             if not tool_calls:
                 break
-            
+
             # Execute tools
             for tool_call in tool_calls:
                 print(f"\n$ {tool_call.function.name}(...)", file=sys.stderr)
-                
+
                 args_dict = json.loads(tool_call.function.arguments)
                 result = execute_tool_call(tool_call)
-                
+
                 # Truncate long outputs for storage
                 if len(result) > 50000:
                     result = result[:25000] + "\n...[truncated]\n" + result[-25000:]
-                
+
                 mgr.add_message(session_id, "tool", f"[{tool_call.function.name}] {result}")
                 api_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": result,
                 })
-            
+
             api_messages.append({
                 "role": "assistant",
                 "content": content,
                 "tool_calls": tool_calls,
             })
-            
+
         except Exception as e:
             print(f"Error: {e}")
             return 1
-    
+
     return 0
 
 
 def cmd_chat(args) -> int:
     """Handle chat command - interactive mode."""
     from openai import OpenAI
-    
+
     session_id = args.session
-    
+
     # Get or create session
     mgr = get_session_manager()
-    
+
     if session_id:
         session = mgr.get_session(session_id)
         if not session:
@@ -368,7 +386,7 @@ def cmd_chat(args) -> int:
                     session_id = s["session_id"]
                     session = s
                     break
-        
+
         if not session:
             print(f"Session not found: {session_id}")
             return 1
@@ -380,46 +398,46 @@ def cmd_chat(args) -> int:
             session_id = session["session_id"]
         else:
             session_id = mgr.get_current()
-    
+
     print(f"\033[36mh_agent - Chat Mode\033[0m")
     print(f"Session: {session_id}")
     print(f"Model: {MODEL}")
     print(f"Type 'q', 'exit' or press Enter to quit")
     print("=" * 50)
-    
+
     # Load history
     messages = mgr.get_history(session_id)
-    
+
     client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     system_prompt = f"You are a helpful AI assistant. Current directory: {os.getcwd()}"
-    
+
     while True:
         try:
             query = input("\n\033[36m>> \033[0m").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye!")
             break
-        
+
         if query.lower() in ("q", "exit", ""):
             print("Goodbye!")
             break
-        
+
         if query.lower() == "/clear":
             messages = []
             print("History cleared")
             continue
-        
+
         if query.lower() == "/history":
             print(f"Messages so far: {len(mgr.get_history(session_id))}")
             continue
-        
+
         # Add user message
         messages.append({"role": "user", "content": query})
         mgr.add_message(session_id, "user", query)
-        
+
         # Build API messages
         api_messages = [{"role": "system", "content": system_prompt}] + messages
-        
+
         # Run agent loop
         try:
             while True:
@@ -430,48 +448,48 @@ def cmd_chat(args) -> int:
                     tool_choice="auto",
                     max_tokens=4096,
                 )
-                
+
                 message = response.choices[0].message
-                
+
                 # Add to history
                 messages.append({
                     "role": "assistant",
                     "content": message.content,
                     "tool_calls": message.tool_calls,
                 })
-                
+
                 if not message.tool_calls:
                     if message.content:
                         print(f"\n{message.content}")
                         mgr.add_message(session_id, "assistant", message.content)
                     break
-                
+
                 # Execute tools
                 for tool_call in message.tool_calls:
                     args_dict = json.loads(tool_call.function.arguments)
                     key = list(args_dict.keys())[0] if args_dict else ""
                     val = args_dict.get(key, "")[:60] if key else ""
                     print(f"\n\033[33m$ {tool_call.function.name}({val})\033[0m", file=sys.stderr)
-                    
+
                     result = execute_tool_call(tool_call)
                     print(f"\033[90m{result[:500]}{'...' if len(result) > 500 else ''}\033[0m", file=sys.stderr)
-                    
+
                     # Truncate for storage
                     if len(result) > 50000:
                         result = result[:25000] + "\n...[truncated]\n" + result[-25000:]
-                    
+
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": result,
                     })
                     mgr.add_message(session_id, "tool", f"[{tool_call.function.name}] {result}")
-                
+
                 api_messages = [{"role": "system", "content": system_prompt}] + messages
-                
+
         except Exception as e:
             print(f"\033[31mError: {e}\033[0m")
-    
+
     return 0
 
 
@@ -493,7 +511,7 @@ def cmd_config(args) -> int:
         print()
         print(f"Config file: {Path.home() / '.h-agent' / 'config.json'}")
         return 0
-    
+
     if args.set_api_key:
         from h_agent.core.config import set_config
         key = args.set_api_key
@@ -503,25 +521,25 @@ def cmd_config(args) -> int:
         set_config("OPENAI_API_KEY", key, secure=True)
         print("API key saved.")
         return 0
-    
+
     if args.clear_key:
         from h_agent.core.config import clear_secret
         clear_secret("OPENAI_API_KEY")
         print("API key cleared.")
         return 0
-    
+
     if args.set_base_url:
         from h_agent.core.config import set_config
         set_config("OPENAI_BASE_URL", args.set_base_url)
         print(f"Base URL set to: {args.set_base_url}")
         return 0
-    
+
     if args.set_model:
         from h_agent.core.config import set_config
         set_config("MODEL_ID", args.set_model)
         print(f"Model set to: {args.set_model}")
         return 0
-    
+
     # No subcommand: show help
     print("h-agent config - Configuration management")
     print()
@@ -542,22 +560,22 @@ def cmd_config(args) -> int:
 def main():
     """Main entry point with argparse."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description="h-agent: AI coding agent with session management",
         prog="h-agent"
     )
     subparsers = parser.add_subparsers(dest="command", help="Commands")
-    
+
     # Daemon commands
     start_parser = subparsers.add_parser("start", help="Start daemon service")
     status_parser = subparsers.add_parser("status", help="Check daemon status")
     stop_parser = subparsers.add_parser("stop", help="Stop daemon service")
-    
+
     # Session commands
     session_parser = subparsers.add_parser("session", help="Session management")
     session_subparsers = session_parser.add_subparsers(dest="subcommand")
-    
+
     session_list_parser = session_subparsers.add_parser("list", help="List sessions")
     session_create_parser = session_subparsers.add_parser("create", help="Create session")
     session_create_parser.add_argument("--name", help="Session name")
@@ -565,15 +583,15 @@ def main():
     session_history_parser.add_argument("session_id", help="Session ID or name")
     session_delete_parser = session_subparsers.add_parser("delete", help="Delete session")
     session_delete_parser.add_argument("session_id", help="Session ID or name")
-    
+
     # Run and chat
     run_parser = subparsers.add_parser("run", help="Run single prompt")
     run_parser.add_argument("--session", help="Session ID or name")
     run_parser.add_argument("prompt", nargs="+", help="Prompt text")
-    
+
     chat_parser = subparsers.add_parser("chat", help="Interactive chat mode")
     chat_parser.add_argument("--session", help="Session ID or name")
-    
+
     # Config
     config_parser = subparsers.add_parser("config", help="Configuration management")
     config_parser.add_argument("--show", action="store_true", help="Show current configuration")
@@ -584,20 +602,25 @@ def main():
         help="Set API base URL")
     config_parser.add_argument("--model", dest="set_model", metavar="MODEL",
         help="Set model ID")
-    
+    config_parser.add_argument("--wizard", action="store_true", help="Run interactive setup wizard")
+
+    # Init
+    init_parser = subparsers.add_parser("init", help="Initialize h-agent with interactive setup")
+    init_parser.add_argument("--quick", action="store_true", help="Quick setup mode")
+
     args = parser.parse_args()
-    
+
     if not args.command:
         # Default: interactive chat
         return cmd_chat(Namespace(session=None))
-    
+
     if args.command == "start":
         return cmd_start(args)
     if args.command == "status":
         return cmd_status(args)
     if args.command == "stop":
         return cmd_stop(args)
-    
+
     if args.command == "session":
         if args.subcommand == "list":
             return cmd_session_list(args)
@@ -609,17 +632,22 @@ def main():
             return cmd_session_delete(args)
         session_parser.print_help()
         return 1
-    
+
     if args.command == "run":
         args.prompt = " ".join(args.prompt)
         return cmd_run(args)
-    
+
     if args.command == "chat":
         return cmd_chat(args)
-    
+
     if args.command == "config":
+        if getattr(args, 'wizard', False):
+            return cmd_config_wizard(args)
         return cmd_config(args)
     
+    if args.command == "init":
+        return cmd_init(args)
+
     parser.print_help()
     return 1
 

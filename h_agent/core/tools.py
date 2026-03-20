@@ -116,6 +116,17 @@ TOOLS = [
     }
 ]
 
+# Import extended tools from h_agent.tools package
+try:
+    from h_agent.tools import ALL_TOOLS as _EXTENDED_TOOLS
+    # Merge extended tools (avoid duplicates by name)
+    _existing_names = {t["function"]["name"] for t in TOOLS}
+    for tool in _EXTENDED_TOOLS:
+        if tool["function"]["name"] not in _existing_names:
+            TOOLS.append(tool)
+except ImportError:
+    pass  # Extended tools not available
+
 
 # ============================================================
 # Tool Handlers
@@ -242,6 +253,15 @@ TOOL_HANDLERS: Dict[str, Callable] = {
     "edit": tool_edit,
     "glob": tool_glob,
 }
+
+# Import extended tool handlers
+try:
+    from h_agent.tools import ALL_HANDLERS as _EXTENDED_HANDLERS
+    for name, handler in _EXTENDED_HANDLERS.items():
+        if name not in TOOL_HANDLERS:
+            TOOL_HANDLERS[name] = handler
+except ImportError:
+    pass  # Extended tools not available
 
 
 def execute_tool_call(tool_call) -> str:

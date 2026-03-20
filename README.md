@@ -4,7 +4,11 @@ OpenAI-powered coding agent harness with modular architecture.
 
 ## 项目介绍
 
-`h-agent` 是一个基于 OpenAI API 的编程智能体框架，提供模块化架构，支持 CLI 交互、工具调用、会话管理、子智能体等特性。
+`h-agent` 是一个基于 AI API 的编程智能体框架，提供模块化架构，支持 CLI 交互、工具调用、会话管理、子智能体等特性。
+
+*"时间不在于你拥有多少，而在于你如何使用。"*
+
+---
 
 ## 安装
 
@@ -20,19 +24,21 @@ cd h-agent
 pip install -e .
 ```
 
+---
+
 ## 快速开始
 
-```bash
-# 交互模式
-h-agent
+### 方式一：交互式设置向导
 
-# 单次命令模式
-h-agent "帮我写一个快速排序"
+```bash
+# 首次使用，运行设置向导
+h-agent init
+
+# 快速设置（最小化提示）
+h-agent init --quick
 ```
 
-## 配置
-
-### 方式一：.env 文件
+### 方式二：手动配置
 
 在项目根目录创建 `.env`：
 
@@ -42,29 +48,181 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 MODEL_ID=gpt-4o
 ```
 
-### 方式二：~/.h-agent/config.yaml
-
-```yaml
-api_base_url: https://api.openai.com/v1
-model_id: gpt-4o
-context_safe_limit: 180000
-```
-
-### 方式三：CLI 命令
+### 开始对话
 
 ```bash
-# 设置 API Key（安全存储）
-h-agent config --api-key YOUR_KEY
+# 交互模式
+h-agent
 
-# 显示当前配置
-h-agent config --show
-
-# 设置其他选项
-h-agent config --base-url https://api.deepseek.com/v1
-h-agent config --model deepseek-chat
+# 或
+h-agent chat
 ```
 
-**配置优先级**：`.env` > `~/.h-agent/secrets.yaml` > `~/.h-agent/config.yaml` > 默认值
+---
+
+## 核心命令
+
+### h-agent init
+
+交互式设置向导，引导你完成 API 配置。
+
+```bash
+h-agent init          # 完整交互式向导
+h-agent init --quick  # 快速设置（最小化提示）
+```
+
+向导会提示你：
+1. 选择 API 提供商（OpenAI / 兼容 API）
+2. 输入 API Key
+3. 选择模型
+4. 配置工作目录
+
+### h-agent start / stop / status
+
+守护进程管理。
+
+```bash
+h-agent start   # 启动守护进程
+h-agent stop    # 停止守护进程
+h-agent status  # 查看守护进程状态
+```
+
+守护进程在后台运行，支持多会话管理和持续上下文。
+
+### h-agent session
+
+会话管理。
+
+```bash
+h-agent session list              # 列出所有会话
+h-agent session create            # 创建新会话
+h-agent session create --name my  # 创建命名会话
+h-agent session history <id>       # 查看会话历史
+h-agent session delete <id>       # 删除会话
+```
+
+### h-agent run
+
+单次命令模式，执行完即退出。
+
+```bash
+h-agent run "帮我写一个快速排序"
+h-agent run --session my "解释这段代码"
+```
+
+### h-agent chat
+
+交互式对话模式。
+
+```bash
+h-agent chat           # 使用默认会话
+h-agent chat --session my  # 使用指定会话
+```
+
+聊天模式支持以下命令：
+- `/clear` - 清空历史
+- `/history` - 查看消息数量
+- `q` / `exit` / 空行 - 退出
+
+### h-agent config
+
+配置管理。
+
+```bash
+h-agent config --show              # 显示当前配置
+h-agent config --api-key KEY       # 设置 API Key
+h-agent config --api-key __prompt__  # 安全输入 API Key
+h-agent config --clear-key         # 清除 API Key
+h-agent config --base-url URL       # 设置 API Base URL
+h-agent config --model MODEL        # 设置模型
+h-agent config --wizard             # 运行交互式设置向导
+```
+
+---
+
+## 内置工具
+
+h-agent 提供丰富的内置工具，Agent 可自动调用。
+
+### 核心工具
+
+| 工具 | 说明 | 示例 |
+|------|------|------|
+| `bash` | 执行 Shell 命令 | `bash(command="ls -la")` |
+| `read` | 读取文件内容 | `read(path="README.md", offset=1, limit=100)` |
+| `write` | 写入文件 | `write(path="test.py", content="# hello")` |
+| `edit` | 精确编辑文件 | `edit(path="test.py", old_text="# hello", new_text="# hi")` |
+| `glob` | 查找匹配文件 | `glob(pattern="**/*.py")` |
+
+### Git 工具
+
+| 工具 | 说明 |
+|------|------|
+| `git_status` | 查看工作区状态 |
+| `git_commit` | 提交更改 |
+| `git_push` | 推送到远程 |
+| `git_pull` | 从远程拉取 |
+| `git_log` | 查看提交历史 |
+| `git_branch` | 分支管理 |
+
+### 文件工具
+
+| 工具 | 说明 |
+|------|------|
+| `file_read` | 读取文件（支持大文件分片） |
+| `file_write` | 写入文件（支持追加模式） |
+| `file_edit` | 精确编辑 |
+| `file_glob` | 查找文件 |
+| `file_exists` | 检查文件是否存在 |
+| `file_info` | 获取文件元信息 |
+
+### Shell 工具
+
+| 工具 | 说明 |
+|------|------|
+| `shell_run` | 执行命令（带安全检查） |
+| `shell_env` | 查看环境变量 |
+| `shell_cd` | 切换工作目录 |
+| `shell_which` | 查找可执行文件路径 |
+
+### Docker 工具
+
+| 工具 | 说明 |
+|------|------|
+| `docker_ps` | 列出容器 |
+| `docker_logs` | 查看容器日志 |
+| `docker_exec` | 在容器中执行命令 |
+| `docker_images` | 列出镜像 |
+| `docker_build` | 构建镜像 |
+| `docker_pull` | 拉取镜像 |
+
+---
+
+## 配置
+
+### 配置优先级
+
+```
+.env 文件 > ~/.h-agent/secrets.yaml > ~/.h-agent/config.yaml > 默认值
+```
+
+### 配置文件位置
+
+- `~/.h-agent/config.yaml` - 普通配置
+- `~/.h-agent/secrets.yaml` - 敏感配置（API Key）
+- `.env` - 项目级配置
+
+### 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `OPENAI_API_KEY` | API Key | - |
+| `OPENAI_BASE_URL` | API Base URL | `https://api.openai.com/v1` |
+| `MODEL_ID` | 模型 ID | `gpt-4o` |
+| `WORKSPACE_DIR` | 工作目录 | `.agent_workspace` |
+| `CONTEXT_SAFE_LIMIT` | 上下文安全限制 | `180000` |
+
+---
 
 ## 项目结构
 
@@ -77,34 +235,28 @@ h-agent/
 │   │   ├── agent_loop.py    # 核心智能体循环
 │   │   ├── config.py        # 配置管理
 │   │   └── tools.py         # 工具定义
+│   ├── tools/               # 扩展工具模块
+│   │   ├── git.py           # Git 操作
+│   │   ├── file_ops.py      # 文件操作
+│   │   ├── shell.py         # Shell 命令
+│   │   └── docker.py        # Docker 操作
 │   ├── features/
 │   │   ├── sessions.py      # 会话持久化
 │   │   ├── channels.py      # 多渠道支持
 │   │   ├── rag.py           # 代码 RAG
 │   │   ├── subagents.py     # 子智能体
 │   │   └── skills.py        # 动态技能
-│   └── cli/
-│       └── commands.py      # CLI 命令
-├── pyproject.toml
+│   ├── cli/
+│   │   ├── commands.py      # CLI 命令
+│   │   └── init_wizard.py  # 设置向导
+│   └── daemon/             # 守护进程
+├── tests/
 ├── README.md
-└── tests/
+├── QUICKSTART.md
+└── pyproject.toml
 ```
 
-## 核心模块
-
-### h_agent.core
-
-- `agent_loop` - 核心循环，工具执行
-- `tools` - 工具定义（bash, read, write, edit, glob）
-- `config` - 配置管理，支持多来源加载
-
-### h_agent.features
-
-- `sessions` - 会话持久化
-- `channels` - 多渠道通信
-- `rag` - 代码语义搜索
-- `subagents` - 隔离子智能体
-- `skills` - 动态技能加载
+---
 
 ## 开发
 
@@ -118,6 +270,38 @@ pytest tests/
 # 带 RAG 支持安装
 pip install -e ".[rag]"
 ```
+
+---
+
+## 常见问题
+
+### Q: 首次使用需要配置什么？
+
+只需运行 `h-agent init`，按提示输入 API Key 即可。
+
+### Q: 支持哪些 API？
+
+支持所有 OpenAI 兼容 API，包括：
+- OpenAI (api.openai.com)
+- DeepSeek (api.deepseek.com)
+- Azure OpenAI
+- 本地模型 (Ollama, LM Studio 等)
+
+### Q: 如何查看当前配置？
+
+```bash
+h-agent config --show
+```
+
+### Q: 如何切换模型？
+
+```bash
+h-agent config --model gpt-4o-mini
+```
+
+---
+
+*"我宁愿犯错，也不愿什么都不做。"*
 
 ## License
 
