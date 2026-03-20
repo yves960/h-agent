@@ -754,56 +754,258 @@ def cmd_chat(args) -> int:
 
 def cmd_config(args) -> int:
     """Handle config command."""
+    # Import refreshed config functions
+    from importlib import reload
+    from h_agent.core import config as config_module
+    reload(config_module)
+
+    if args.list_all:
+        all_cfg = config_module.list_all_config()
+        print("=== All Config Profiles ===")
+        print(f"Current profile: {all_cfg['current_profile']}")
+        print(f"Available profiles: {', '.join(all_cfg['profiles'].keys())}")
+        for name, cfg in all_cfg["profiles"].items():
+            marker = " ← current" if name == all_cfg["current_profile"] else ""
+            print(f"\n[{name}]{marker}")
+            for k, v in cfg.items():
+                print(f"  {k}: {v}")
+        return 0
+
     if args.show:
-        config = list_config()
-        print("=== h-agent Configuration ===")
+        config = config_module.list_config()
+        profile = config_module.get_current_profile()
+        print(f"=== h-agent Configuration (profile: {profile}) ===")
         if "openai_api_key" in config:
-            print(f"  OPENAI_API_KEY: {config['openai_api_key'][:10]}...")
+            print(f"  OPENAI_API_KEY: {config['openai_api_key']}")
         if "openai_base_url" in config:
             print(f"  OPENAI_BASE_URL: {config['openai_base_url']}")
         if "model_id" in config:
             print(f"  MODEL_ID: {config['model_id']}")
+        if "context_safe_limit" in config:
+            print(f"  CONTEXT_SAFE_LIMIT: {config['context_safe_limit']}")
+        if "max_tool_output" in config:
+            print(f"  MAX_TOOL_OUTPUT: {config['max_tool_output']}")
+        if "tool_timeout" in config:
+            print(f"  TOOL_TIMEOUT: {config['tool_timeout']}")
         print()
-        print(f"Config file: {Path.home() / '.h-agent' / 'config.json'}")
+        print(f"Config dir: {config_module.AGENT_CONFIG_DIR}")
+        print(f"Config file: {config_module._get_profile_config_path(profile)}")
+        return 0
+
+    if args.profile_delete:
+        name = args.profile_delete
+        if name == "default":
+            _err("Cannot delete the 'default' profile")
+            return 1
+        if config_module.delete_profile(name):
+            _ok(f"Deleted profile: {name}")
+        else:
+            _err(f"Failed to delete profile '{name}'")
+        return 0
+
+    if args.profile_create:
+        name = args.profile_create
+        if config_module.create_profile(name):
+            _ok(f"Created profile: {name}")
+        else:
+            _err(f"Profile '{name}' already exists")
+        return 0
+
+    if args.profile_switch:
+        profile = args.profile_switch
+        if config_module.set_current_profile(profile):
+            _ok(f"Switched to profile: {profile}")
+        else:
+            _err(f"Profile '{profile}' not found")
         return 0
 
     if args.set_api_key:
-        from h_agent.core.config import set_config
         key = args.set_api_key
         if key == "__prompt__":
             import getpass
             key = getpass.getpass("Enter API key: ")
-        set_config("OPENAI_API_KEY", key, secure=True)
+        config_module.set_config("OPENAI_API_KEY", key, secure=True)
         _ok("API key saved.")
         return 0
 
     if args.clear_key:
-        from h_agent.core.config import clear_secret
-        clear_secret("OPENAI_API_KEY")
+        config_module.clear_secret("OPENAI_API_KEY")
         _ok("API key cleared.")
         return 0
 
     if args.set_base_url:
-        from h_agent.core.config import set_config
-        set_config("OPENAI_BASE_URL", args.set_base_url)
+        config_module.set_config("OPENAI_BASE_URL", args.set_base_url)
         print(f"Base URL set to: {args.set_base_url}")
         return 0
 
     if args.set_model:
-        from h_agent.core.config import set_config
-        set_config("MODEL_ID", args.set_model)
+        config_module.set_config("MODEL_ID", args.set_model)
         print(f"Model set to: {args.set_model}")
+        return 0
+
+    if args.export:
+        path = config_module.export_config()
+        _ok(f"Exported to: {path}")
+        return 0
+
+    if args.import_cfg:
+        path = Path(args.import_cfg)
+        if not path.exists():
+            _err(f"File not found: {path}")
+            return 1
+        if config_module.import_config(path):
+            _ok(f"Imported from: {path}")
+        else:
+            _err("Import failed")
         return 0
 
     print("h-agent config - Configuration management")
     print()
     print("Usage:")
     print("  h-agent config --show              Show current config")
+    print("  h-agent config --list-all         Show all profiles")
+    print("  h-agent config --profile <name>    Switch to profile")
+    print("  h-agent config --profile create <name>  Create new profile")
+    print("  h-agent config --profile delete <name>  Delete a profile")
     print("  h-agent config --api-key KEY       Set API key")
-    print("  h-agent config --api-key __prompt__  Set API key (prompt for input)")
+    print("  h-agent config --api-key __prompt__  Set API key (prompt)")
     print("  h-agent config --clear-key         Remove stored API key")
     print("  h-agent config --base-url URL      Set API base URL")
     print("  h-agent config --model MODEL       Set model ID")
+    print("  h-agent config --export            Export config to JSON")
+    print("  h-agent config --import FILE       Import config from JSON")
+    return 0
+
+
+# ============================================================
+# Plugin Management
+# ============================================================
+
+def cmd_plugin(args) -> int:
+    """Handle plugin command."""
+    from importlib import reload
+    from h_agent import plugins as plugins_module
+    reload(plugins_module)
+
+    action = args.plugin_action
+
+    if action == "list":
+        plugins_module.load_all_plugins()
+        plugins = plugins_module.list_plugins()
+        if not plugins:
+            print("No plugins loaded.")
+            print("  Built-in plugin 'web_tools' provides web_fetch and web_search.")
+            print("  Place .py files in h_agent/plugins/ to load custom plugins.")
+            return 0
+        print(f"Plugins ({len(plugins)}):")
+        for p in plugins:
+            status = "✅ enabled" if p.enabled else "❌ disabled"
+            tools = ", ".join(t["function"]["name"] for t in p.tools) if p.tools else "(no tools)"
+            print(f"  {p.name} v{p.version} [{status}]")
+            print(f"    {p.description}")
+            if p.tools:
+                print(f"    Tools: {tools}")
+        return 0
+
+    if action == "enable":
+        plugins_module.load_all_plugins()
+        name = args.plugin_name
+        if plugins_module.enable_plugin(name):
+            _ok(f"Enabled plugin: {name}")
+        else:
+            _err(f"Plugin not found: {name}")
+        return 0
+
+    if action == "disable":
+        plugins_module.load_all_plugins()
+        name = args.plugin_name
+        if plugins_module.disable_plugin(name):
+            _ok(f"Disabled plugin: {name}")
+        else:
+            _err(f"Plugin not found: {name}")
+        return 0
+
+    if action == "install":
+        url = args.plugin_url
+        if not url:
+            _err("Plugin URL required: h-agent plugin install <url>")
+            return 1
+        print(f"Installing plugin from: {url}")
+        # Simple git clone or download
+        import urllib.request
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "h-agent/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                content = resp.read()
+            # Try to detect if it's a git URL
+            if url.endswith(".git"):
+                import subprocess
+                name = url.split("/")[-1].replace(".git", "")
+                dest = plugins_module.PLUGIN_DIR / name
+                print(f"Cloning into {dest}...")
+                r = subprocess.run(["git", "clone", url, str(dest)],
+                                   capture_output=True, text=True, timeout=30)
+                if r.returncode == 0:
+                    _ok(f"Installed plugin: {name}")
+                else:
+                    _err(f"Git clone failed: {r.stderr}")
+                return 0
+            # Try to save as plugin file
+            name = url.split("/")[-1]
+            if not name.endswith(".py"):
+                name += ".py"
+            dest = plugins_module.PLUGIN_DIR / name
+            dest.write_bytes(content)
+            _ok(f"Installed plugin: {dest.name}")
+            return 0
+        except Exception as e:
+            _err(f"Install failed: {e}")
+            return 1
+
+    if action == "uninstall":
+        name = args.plugin_name
+        plugins_module.load_all_plugins()
+        plugin = plugins_module.get_plugin(name)
+        if not plugin or not plugin.path:
+            _err(f"Plugin not found: {name}")
+            return 1
+        try:
+            if plugin.path.is_file():
+                plugin.path.unlink()
+            elif plugin.path.is_dir():
+                import shutil
+                shutil.rmtree(plugin.path)
+            _ok(f"Uninstalled plugin: {name}")
+        except OSError as e:
+            _err(f"Failed to uninstall: {e}")
+        return 0
+
+    if action == "info":
+        plugins_module.load_all_plugins()
+        plugin = plugins_module.get_plugin(args.plugin_name)
+        if not plugin:
+            _err(f"Plugin not found: {args.plugin_name}")
+            return 1
+        print(f"Plugin: {plugin.name}")
+        print(f"  Version: {plugin.version}")
+        print(f"  Author: {plugin.author}")
+        print(f"  Description: {plugin.description}")
+        print(f"  Status: {'enabled' if plugin.enabled else 'disabled'}")
+        print(f"  Path: {plugin.path}")
+        print(f"  Tools ({len(plugin.tools)}):")
+        for t in plugin.tools:
+            print(f"    - {t['function']['name']}: {t['function'].get('description', '')}")
+        return 0
+
+    print("h-agent plugin - Plugin management")
+    print()
+    print("Usage:")
+    print("  h-agent plugin list                       List all plugins")
+    print("  h-agent plugin info <name>                Show plugin details")
+    print("  h-agent plugin enable <name>              Enable a plugin")
+    print("  h-agent plugin disable <name>             Disable a plugin")
+    print("  h-agent plugin install <url>              Install plugin from URL")
+    print("  h-agent plugin uninstall <name>          Uninstall a plugin")
     return 0
 
 
@@ -919,6 +1121,8 @@ def main():
     # ---- Config ----
     config_parser = subparsers.add_parser("config", help="Configuration management")
     config_parser.add_argument("--show", action="store_true", help="Show current configuration")
+    config_parser.add_argument("--list-all", dest="list_all", action="store_true",
+        help="Show all config profiles")
     config_parser.add_argument("--api-key", dest="set_api_key", metavar="KEY",
         help="Set API key (use __prompt__ for secure input)")
     config_parser.add_argument("--clear-key", action="store_true", help="Remove stored API key")
@@ -927,6 +1131,30 @@ def main():
     config_parser.add_argument("--model", dest="set_model", metavar="MODEL",
         help="Set model ID")
     config_parser.add_argument("--wizard", action="store_true", help="Run interactive setup wizard")
+    config_parser.add_argument("--profile", dest="profile_switch", metavar="NAME",
+        help="Switch to a config profile")
+    config_parser.add_argument("--profile-create", dest="profile_create", metavar="NAME",
+        help="Create a new config profile")
+    config_parser.add_argument("--profile-delete", dest="profile_delete", metavar="NAME",
+        help="Delete a config profile")
+    config_parser.add_argument("--export", action="store_true", help="Export config to JSON")
+    config_parser.add_argument("--import", dest="import_cfg", metavar="FILE",
+        help="Import config from JSON file")
+
+    # ---- Plugin ----
+    plugin_parser = subparsers.add_parser("plugin", help="Plugin management")
+    plugin_subparsers = plugin_parser.add_subparsers(dest="plugin_action")
+    plugin_list_parser = plugin_subparsers.add_parser("list", help="List all plugins")
+    plugin_info_parser = plugin_subparsers.add_parser("info", help="Show plugin details")
+    plugin_info_parser.add_argument("plugin_name", help="Plugin name")
+    plugin_enable_parser = plugin_subparsers.add_parser("enable", help="Enable a plugin")
+    plugin_enable_parser.add_argument("plugin_name", help="Plugin name")
+    plugin_disable_parser = plugin_subparsers.add_parser("disable", help="Disable a plugin")
+    plugin_disable_parser.add_argument("plugin_name", help="Plugin name")
+    plugin_install_parser = plugin_subparsers.add_parser("install", help="Install plugin from URL")
+    plugin_install_parser.add_argument("plugin_url", help="Plugin URL or git repo")
+    plugin_uninstall_parser = plugin_subparsers.add_parser("uninstall", help="Uninstall a plugin")
+    plugin_uninstall_parser.add_argument("plugin_name", help="Plugin name")
 
     # ---- Init ----
     init_parser = subparsers.add_parser("init", help="Initialize h-agent with interactive setup")
@@ -987,6 +1215,9 @@ def main():
         if getattr(args, 'wizard', False):
             return cmd_config_wizard(args)
         return cmd_config(args)
+
+    if args.command == "plugin":
+        return cmd_plugin(args)
 
     if args.command == "init":
         return cmd_init(args)
