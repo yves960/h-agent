@@ -43,6 +43,7 @@ from h_agent.core.config import (
 )
 
 from h_agent.session.manager import SessionManager, get_manager
+from h_agent.features.sessions import SessionStore
 from h_agent.team.agent import (
     AgentLoader, FullAgentHandler, init_agent_profile,
     create_full_handler, list_team_agents, AGENTS_DIR
@@ -176,6 +177,21 @@ def stop_daemon():
 
 def cmd_start(args) -> int:
     """Handle start command."""
+    from h_agent.features.sessions import SessionStore, SESSION_TTL_DAYS
+    from pathlib import Path
+    
+    workspace = Path.cwd() / ".agent_workspace"
+    sessions_dir = workspace / "sessions"
+    
+    if sessions_dir.exists():
+        total_deleted = 0
+        for agent_dir in [d for d in sessions_dir.iterdir() if d.is_dir()]:
+            store = SessionStore(agent_dir.name)
+            deleted = store.cleanup_expired()
+            total_deleted += deleted
+        if total_deleted > 0:
+            print(f"[Cleanup] Removed {total_deleted} expired session(s)")
+    
     return start_daemon()
 
 
@@ -791,6 +807,43 @@ def cmd_session_group(args) -> int:
                 print(f"  {s['session_id']}  {s.get('name', 'unnamed'):<20}")
         return 0
 
+    return 0
+
+
+def cmd_session_cleanup(args) -> int:
+    """Handle session cleanup command - clean expired sessions."""
+    import os
+    from h_agent.features.sessions import SESSION_TTL_DAYS
+    from pathlib import Path
+    
+    print(f"Session cleanup (TTL: {SESSION_TTL_DAYS} days)")
+    print("-" * 50)
+    
+    workspace = Path.cwd() / ".agent_workspace"
+    sessions_dir = workspace / "sessions"
+    
+    if not sessions_dir.exists():
+        print("No sessions directory found")
+        return 0
+    
+    agent_dirs = [d for d in sessions_dir.iterdir() if d.is_dir()]
+    if not agent_dirs:
+        print("No agent sessions found")
+        return 0
+    
+    total_deleted = 0
+    for agent_dir in agent_dirs:
+        store = SessionStore(agent_dir.name)
+        deleted = store.cleanup_expired()
+        if deleted > 0:
+            print(f"  {agent_dir.name}: deleted {deleted} expired session(s)")
+            total_deleted += deleted
+    
+    if total_deleted > 0:
+        _ok(f"\nTotal: cleaned {total_deleted} expired session(s)")
+    else:
+        print("\nNo expired sessions found")
+    
     return 0
 
 
@@ -1988,6 +2041,21 @@ def cmd_skill(args) -> int:
 
 def cmd_web(args) -> int:
     """Handle web command - start the Web UI server."""
+    from h_agent.features.sessions import SessionStore
+    from pathlib import Path
+    
+    workspace = Path.cwd() / ".agent_workspace"
+    sessions_dir = workspace / "sessions"
+    
+    if sessions_dir.exists():
+        total_deleted = 0
+        for agent_dir in [d for d in sessions_dir.iterdir() if d.is_dir()]:
+            store = SessionStore(agent_dir.name)
+            deleted = store.cleanup_expired()
+            total_deleted += deleted
+        if total_deleted > 0:
+            print(f"[Cleanup] Removed {total_deleted} expired session(s)")
+    
     from h_agent.web.server import run_server
     run_server(port=args.port, open_browser=not args.no_browser)
     return 0
@@ -2116,6 +2184,9 @@ def main():
     sg_set_parser.add_argument("group_name", nargs="?", help="Group name (empty to clear)")
     sg_sessions_parser = sg_subparsers.add_parser("sessions", help="List sessions in group")
     sg_sessions_parser.add_argument("group_name", help="Group name")
+
+    # session cleanup
+    session_subparsers.add_parser("cleanup", help="Clean up expired sessions")
 
     # ---- RAG ----
     rag_parser = subparsers.add_parser("rag", help="Codebase RAG")
@@ -2351,6 +2422,8 @@ def main():
             return cmd_session_tag(args)
         if sub == "group":
             return cmd_session_group(args)
+        if sub == "cleanup":
+            return cmd_session_cleanup(args)
         session_parser.print_help()
         return 1
 
