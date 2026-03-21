@@ -11,7 +11,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from h_agent.core.client import get_client
 from h_agent.core.config import MODEL
@@ -20,11 +20,7 @@ TEAM_DIR = Path(os.path.expanduser("~/.h-agent/team"))
 
 
 class AsyncMessageBus:
-    """File-based async message bus using JSONL inboxes.
-    
-    Messages are stored as JSONL (one JSON object per line).
-    read_inbox() drains the inbox (clears after read).
-    """
+    """File-based async message bus using JSONL inboxes."""
     
     def __init__(self, inbox_dir: Path = None):
         self.inbox_dir = inbox_dir or (TEAM_DIR / "inbox_async")
@@ -33,7 +29,6 @@ class AsyncMessageBus:
     
     def send(self, sender: str, to: str, content: str,
              msg_type: str = "message", **extra: Any) -> str:
-        """Append message to recipient's inbox file."""
         msg = {
             "type": msg_type,
             "from": sender,
@@ -51,7 +46,6 @@ class AsyncMessageBus:
         return f"Sent {msg_type} to {to}"
     
     def read_inbox(self, name: str) -> List[Dict]:
-        """Drain and return all messages from inbox. Returns [] if empty."""
         inbox_path = self.inbox_dir / f"{name}.jsonl"
         
         if not inbox_path.exists():
@@ -76,7 +70,6 @@ class AsyncMessageBus:
     
     def broadcast(self, sender: str, recipients: List[str], content: str,
                   msg_type: str = "broadcast") -> str:
-        """Broadcast message to all recipients except sender."""
         count = 0
         for name in recipients:
             if name != sender:
@@ -86,28 +79,47 @@ class AsyncMessageBus:
 
 
 class TeammateManager:
-    """Manages team lifecycle and teammate threads.
+    """Manages team lifecycle and teammate threads."""
     
-    Spawns persistent daemon threads for each teammate.
-    Tracks status: working -> idle -> shutdown.
-    """
+    CONFIG_FILE = TEAM_DIR / "async_team_config.json"
     
     def __init__(self, team_id: str = "default", inbox_dir: Path = None):
         self.team_id = team_id
         self.inbox_dir = inbox_dir or (TEAM_DIR / "inbox_async")
+        self.inbox_dir.mkdir(parents=True, exist_ok=True)
+        self.config_path = self.CONFIG_FILE
         self.threads: Dict[str, threading.Thread] = {}
         self.statuses: Dict[str, str] = {}
+        self.members: Dict[str, Dict] = {}
         self._lock = threading.Lock()
         self._shutdown_requested: Dict[str, bool] = {}
+        self._load_config()
+    
+    def _load_config(self):
+        if self.config_path.exists():
+            try:
+                config = json.loads(self.config_path.read_text())
+                self.members = config.get("members", {})
+            except (json.JSONDecodeError, IOError):
+                self.members = {}
+    
+    def _save_config(self):
+        config = {
+            "team_id": self.team_id,
+            "members": self.members,
+        }
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        self.config_path.write_text(json.dumps(config, indent=2))
     
     def spawn(self, name: str, role: str, prompt: str,
               agent_handler: Any) -> str:
-        """Spawn a persistent teammate thread."""
         if name in self.threads and self.statuses.get(name) == "working":
             return f"Error: '{name}' is already running"
         
         self._shutdown_requested[name] = False
         self.statuses[name] = "working"
+        self.members[name] = {"role": role, "prompt": prompt, "status": "working"}
+        self._save_config()
         
         thread = threading.Thread(
             target=_teammate_loop,
@@ -120,31 +132,32 @@ class TeammateManager:
         return f"Spawned '{name}' (role: {role})"
     
     def shutdown(self, name: str) -> str:
-        """Signal a teammate to gracefully shutdown."""
         self._shutdown_requested[name] = True
         self.statuses[name] = "shutdown"
+        if name in self.members:
+            self.members[name]["status"] = "shutdown"
+        self._save_config()
         return f"Shutdown requested for '{name}'"
     
     def get_status(self, name: str) -> Optional[str]:
-        """Get current status: 'working', 'idle', or 'shutdown'."""
         return self.statuses.get(name)
     
     def list_members(self) -> List[Dict]:
-        """Return team roster with name, role, status."""
         return [
-            {"name": name, "status": status}
+            {"name": name, "role": self.members.get(name, {}).get("role", ""), "status": status}
             for name, status in self.statuses.items()
         ]
     
     def _set_status(self, name: str, status: str):
-        """Internal: set teammate status."""
         with self._lock:
             self.statuses[name] = status
+            if name in self.members:
+                self.members[name]["status"] = status
+        self._save_config()
 
 
 def _execute_team_tool(tool_name: str, args: Dict, sender: str,
                       bus: AsyncMessageBus) -> str:
-    """Execute a tool call within teammate context."""
     if tool_name == "bash":
         import subprocess
         try:
@@ -290,11 +303,6 @@ TEAMMATE_TOOLS = [
 def _teammate_loop(name: str, role: str, prompt: str,
                    agent_handler: Any, manager: TeammateManager,
                    max_iterations: int = 50):
-    """Per-teammate thread loop.
-    
-    States: WORKING -> IDLE (poll inbox) -> WORKING
-    Handles shutdown gracefully.
-    """
     client = get_client()
     messages = [{"role": "user", "content": prompt}]
     sys_prompt = f"You are '{name}', role: {role}. Use send_message to communicate. Complete your task."
@@ -336,17 +344,18 @@ def _teammate_loop(name: str, role: str, prompt: str,
         
         manager._set_status(name, "working")
         
+        assistant_msg = response.choices[0].message
         messages.append({
             "role": "assistant",
-            "content": response.choices[0].message.content,
+            "content": assistant_msg.content,
             "tool_calls": [
                 {"id": tc.id, "type": "function",
                  "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                for tc in response.choices[0].message.tool_calls
+                for tc in assistant_msg.tool_calls
             ]
         })
         
-        for tc in response.choices[0].message.tool_calls:
+        for tc in assistant_msg.tool_calls:
             args = json.loads(tc.function.arguments)
             result = _execute_team_tool(tc.function.name, args, name, bus)
             messages.append({
@@ -356,3 +365,112 @@ def _teammate_loop(name: str, role: str, prompt: str,
             })
     
     manager._set_status(name, "shutdown")
+
+
+LEAD_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "send_message",
+            "description": "Send a message to a teammate asynchronously.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to": {"type": "string", "description": "Recipient teammate name"},
+                    "content": {"type": "string", "description": "Message content"},
+                    "msg_type": {"type": "string", "enum": ["message", "task", "broadcast"]}
+                },
+                "required": ["to", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "broadcast",
+            "description": "Broadcast message to all teammates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "Message content to broadcast"}
+                },
+                "required": ["content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_teammates",
+            "description": "List all teammates with their status.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_inbox",
+            "description": "Read and drain your inbox.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shutdown_teammate",
+            "description": "Request a teammate to shutdown gracefully.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Teammate name to shutdown"}
+                },
+                "required": ["name"]
+            }
+        }
+    },
+]
+
+
+class AsyncAgentTeam:
+    """Async team wrapper providing talk_to_async and team coordination."""
+    
+    def __init__(self, team_id: str = "default"):
+        self.team_id = team_id
+        self.bus = AsyncMessageBus()
+        self.manager = TeammateManager(team_id)
+    
+    def talk_to_async(self, agent_name: str, message: str, timeout: float = 120) -> Dict:
+        self.bus.send("lead", agent_name, message, msg_type="dialog")
+        
+        start = time.time()
+        while time.time() - start < timeout:
+            inbox = self.bus.read_inbox("lead")
+            for msg in inbox:
+                if msg.get("type") == "response" and msg.get("in_reply_to"):
+                    return {
+                        "success": True,
+                        "content": msg.get("content", ""),
+                    }
+            time.sleep(0.5)
+        
+        return {
+            "success": False,
+            "content": None,
+            "error": f"Timeout waiting for response from {agent_name}"
+        }
+    
+    def list_teammates(self) -> List[Dict]:
+        return self.manager.list_members()
+    
+    def shutdown_teammate(self, name: str) -> str:
+        return self.manager.shutdown(name)
+    
+    def shutdown_all(self):
+        for member in self.manager.list_members():
+            self.manager.shutdown(member["name"])
