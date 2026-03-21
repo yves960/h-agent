@@ -61,7 +61,7 @@ def get_agent_tools():
     return tools
 
 
-async def run_agent_async(messages: list, q: queue.Queue):
+async def run_agent_async(messages: list, q: queue.Queue, session_id: str = None, mgr = None):
     """Run the agent loop and put SSE events into a queue."""
     from openai import OpenAI
     
@@ -70,6 +70,7 @@ async def run_agent_async(messages: list, q: queue.Queue):
     system_prompt = f"You are a helpful AI assistant. Current directory: {os.getcwd()}"
     
     api_messages = [{"role": "system", "content": system_prompt}] + messages
+    full_response = ""
     
     try:
         while True:
@@ -88,6 +89,7 @@ async def run_agent_async(messages: list, q: queue.Queue):
                 
                 if content:
                     q.put(("token", {"content": content}))
+                    full_response += content
                 else:
                     # Tool call without content - show the tool name
                     if tool_calls:
@@ -110,6 +112,7 @@ async def run_agent_async(messages: list, q: queue.Queue):
                     
                     q.put(("tool_end", {"name": tool_call.function.name, "result": result[:500]}))
                     q.put(("token", {"content": f"[Tool result: {result[:200]}]\n"}))
+                    full_response += f"[Tool result: {result[:200]}]\n"
                     
                     api_messages.append({
                         "role": "tool",
@@ -126,6 +129,9 @@ async def run_agent_async(messages: list, q: queue.Queue):
             except Exception as e:
                 q.put(("error", {"error": str(e)}))
                 break
+        
+        if session_id and mgr and full_response:
+            mgr.add_message(session_id, "assistant", full_response)
         
         q.put(("end", {"done": True}))
         
@@ -284,9 +290,9 @@ def api_chat():
         asyncio.set_event_loop(loop)
         try:
             if agent_id == "__default__":
-                loop.run_until_complete(run_agent_async(messages, q))
+                loop.run_until_complete(run_agent_async(messages, q, session_id, mgr))
             else:
-                loop.run_until_complete(run_team_agent_async(agent_id, message, messages, q))
+                loop.run_until_complete(run_team_agent_async(agent_id, message, messages, q, session_id, mgr))
         finally:
             loop.close()
     
@@ -330,8 +336,9 @@ def api_chat():
     )
 
 
-async def run_team_agent_async(agent_name: str, message: str, messages: list, q: queue.Queue):
+async def run_team_agent_async(agent_name: str, message: str, messages: list, q: queue.Queue, session_id: str = None, mgr = None):
     """Run a team agent and stream its response via SSE."""
+    full_response = ""
     try:
         team = get_team()
         member = team.get_member(agent_name)
@@ -346,7 +353,6 @@ async def run_team_agent_async(agent_name: str, message: str, messages: list, q:
             q.put(("end", {"done": True}))
             return
         
-        # Use talk_to for conversational interaction
         from h_agent.team.team import TeamMessage, AgentRole
         
         msg = TeamMessage(
@@ -361,12 +367,15 @@ async def run_team_agent_async(agent_name: str, message: str, messages: list, q:
         result = member.handle_message(msg)
         
         if result.success:
-            # Stream the response as tokens
             content = result.content or ""
             if content:
                 q.put(("token", {"content": content}))
+                full_response += content
         else:
             q.put(("error", {"error": result.error or "Unknown error"}))
+        
+        if session_id and mgr and full_response:
+            mgr.add_message(session_id, "assistant", full_response)
         
         q.put(("end", {"done": True}))
         
