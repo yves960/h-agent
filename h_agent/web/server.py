@@ -388,26 +388,23 @@ async def run_team_agent_async(agent_name: str, message: str, messages: list, q:
             q.put(("end", {"done": True}))
             return
         
-        from h_agent.team.team import TeamMessage, AgentRole
+        handler = get_full_agent_handler(agent_name)
         
-        msg = TeamMessage(
-            msg_id=f"web-{os.urandom(4).hex()}",
-            sender="user",
-            receiver=agent_name,
-            role=AgentRole.COORDINATOR,
-            type="dialog",
-            content=message,
-        )
-        
-        result = member.handle_message(msg)
-        
-        if result.success:
-            content = result.content or ""
-            if content:
-                q.put(("token", {"content": content}))
-                full_response += content
-        else:
-            q.put(("error", {"error": result.error or "Unknown error"}))
+        for event in handler.run_streaming(message, session_id=session_id, max_turns=20):
+            event_type = event.get("event")
+            data = event.get("data", {})
+            
+            if event_type == "token":
+                q.put(("token", {"content": data.get("token", "")}))
+                full_response += data.get("token", "")
+            elif event_type == "tool_start":
+                q.put(("tool_start", {"name": data.get("name"), "args": data.get("args")}))
+            elif event_type == "tool_end":
+                q.put(("tool_end", {"name": data.get("name"), "result": data.get("result")}))
+            elif event_type == "error":
+                q.put(("error", {"error": data.get("error")}))
+            elif event_type == "end":
+                pass
         
         if session_id and mgr and full_response:
             mgr.add_message(session_id, "assistant", full_response)
