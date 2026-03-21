@@ -341,6 +341,15 @@ class FullAgentHandler:
         
         system_prompt = AgentLoader.build_system_prompt(self.profile, extra_context)
         
+        if self.team:
+            system_prompt += """
+
+## 团队协作工具使用说明
+当你需要与团队成员通信时，必须使用 talk_to 工具！
+- 通过 tool_calls 机制调用 talk_to，不是输出代码
+- 绝对不要在回复文本中输出 talk_to(...) 代码
+- 示例正确调用：响应中包含 tool_call，API会自动执行 talk_to"""
+        
         result_messages = [{"role": "system", "content": system_prompt}]
         
         if context:
