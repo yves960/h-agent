@@ -174,15 +174,24 @@ class SessionStore:
         
         session_file = self._session_path(session_id)
         
+        if session_id not in self._index:
+            now = datetime.now().isoformat()
+            self._index[session_id] = SessionMeta(
+                session_id=session_id,
+                agent_id=self.agent_id,
+                created_at=now,
+                updated_at=now,
+            ).to_dict()
+            session_file.touch()
+        
         with _file_lock(session_file, mode="w"):
             with open(session_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(turn, ensure_ascii=False) + "\n")
         
-        if session_id in self._index:
-            meta = self._index[session_id]
-            meta["message_count"] = meta.get("message_count", 0) + 1
-            meta["updated_at"] = datetime.now().isoformat()
-            self._save_index()
+        meta = self._index[session_id]
+        meta["message_count"] = meta.get("message_count", 0) + 1
+        meta["updated_at"] = datetime.now().isoformat()
+        self._save_index()
     
     def get_recent_sessions(self, limit: int = 10) -> List[dict]:
         """获取最近的会话列表。"""
