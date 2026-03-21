@@ -108,11 +108,43 @@ class HAgentUI {
         this.sessions.forEach(s => {
             const el = document.createElement('div');
             el.className = 'session-item' + (s.session_id === this.currentSessionId ? ' active' : '');
-            el.textContent = s.name || s.session_id;
-            el.title = s.name || s.session_id;
-            el.addEventListener('click', () => this.selectSession(s.session_id));
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'session-name';
+            nameSpan.textContent = s.name || s.session_id;
+            nameSpan.title = s.name || s.session_id;
+            nameSpan.addEventListener('click', () => this.selectSession(s.session_id));
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'session-delete-btn';
+            deleteBtn.textContent = '×';
+            deleteBtn.title = 'Delete session';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteSession(s.session_id);
+            });
+            
+            el.appendChild(nameSpan);
+            el.appendChild(deleteBtn);
             this.sessionListEl.appendChild(el);
         });
+    }
+    
+    async deleteSession(sessionId) {
+        if (!confirm('Delete this conversation?')) return;
+        
+        try {
+            const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                if (this.currentSessionId === sessionId) {
+                    this.newChat();
+                }
+                await this.loadSessions();
+            }
+        } catch (e) {
+            console.error('Failed to delete session:', e);
+        }
     }
     
     async newChat() {
