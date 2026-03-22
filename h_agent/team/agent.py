@@ -28,6 +28,7 @@ from h_agent.features.sessions import (
 )
 from h_agent.memory.long_term import LongTermMemory
 from h_agent.features.rag import CodebaseRAG
+from h_agent.logging_config import get_llm_logger, get_agent_logger, log_llm_call
 
 AGENTS_DIR = Path.home() / ".h-agent" / "agents"
 AGENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -578,7 +579,9 @@ class FullAgentHandler:
             messages = self.build_messages(task_content)
             
             for turn in range(max_turns):
-                # Stream the response
+                agent_name = getattr(self, 'agent_name', 'unknown')
+                log_llm_call(agent_name, messages, self.tools, MODEL)
+                
                 response = self.client.chat.completions.create(
                     model=MODEL,
                     messages=messages,
@@ -587,6 +590,8 @@ class FullAgentHandler:
                     max_tokens=4096,
                     stream=True,
                 )
+                
+                get_llm_logger().log("turn_start", {"agent": agent_name, "turn": turn})
                 
                 # Collect assistant message content and tool calls
                 assistant_content = ""
@@ -646,11 +651,12 @@ class FullAgentHandler:
                             "data": {"name": func_name, "args": str(args_dict)[:200]}
                         }
                         
-                        # Execute tool
                         result = execute_tool_call_with_handlers(
                             type('obj', (object,), {"function": type('obj', (object,), {"name": func_name, "arguments": func_args})()})(),
                             self.tool_handlers
                         )
+                        
+                        get_agent_logger().log_tool_call(agent_name, func_name, args_dict, result)
                         
                         # Truncate long results
                         if len(result) > 50000:

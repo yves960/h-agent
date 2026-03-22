@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from h_agent.core.client import get_client
 from h_agent.core.config import MODEL
+from h_agent.logging_config import get_message_logger, get_llm_logger, trace
 
 TEAM_DIR = Path(os.path.expanduser("~/.h-agent/team"))
 
@@ -43,6 +44,9 @@ class AsyncMessageBus:
             with open(inbox_path, "a") as f:
                 f.write(json.dumps(msg) + "\n")
         
+        get_message_logger().log_message_sent(sender, to, msg_type, content)
+        trace(f"[MESSAGE] {sender} → {to} ({msg_type}): {content[:100]}", "message")
+        
         return f"Sent {msg_type} to {to}"
     
     def read_inbox(self, name: str) -> List[Dict]:
@@ -65,6 +69,11 @@ class AsyncMessageBus:
                     messages.append(json.loads(line))
                 except json.JSONDecodeError:
                     pass
+        
+        for msg in messages:
+            get_message_logger().log_message_received(
+                name, msg.get("from", "?"), msg.get("type", "?"), msg.get("content", "")
+            )
         
         return messages
     
@@ -347,6 +356,14 @@ def _teammate_loop(name: str, role: str, prompt: str,
             })
             
             try:
+                get_llm_logger().log_llm_request(
+                    agent_name=f"[TEAMMATE]{name}",
+                    messages_count=len(messages) + 1,
+                    tools_count=len(TEAMMATE_TOOLS),
+                    model=MODEL
+                )
+                trace(f"[{name}] Calling LLM with {len(messages)} messages", "teammate")
+                
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=[{"role": "system", "content": sys_prompt}] + messages,
