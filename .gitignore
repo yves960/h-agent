@@ -26,6 +26,9 @@ Thumbs.db
 .coverage
 htmlcov/
 
+# Node (if used)
+node_modules/
+
 # Agent
 .agent_context/
 .agent_mailboxes/

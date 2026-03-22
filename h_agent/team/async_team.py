@@ -303,9 +303,18 @@ TEAMMATE_TOOLS = [
 def _teammate_loop(name: str, role: str, prompt: str,
                    agent_handler: Any, manager: TeammateManager,
                    max_iterations: int = 50):
+    """
+    Persistent loop for teammate agent threads.
+    
+    Each iteration:
+    1. Check shutdown signal
+    2. Read inbox for new messages
+    3. Process each message with LLM + tools
+    4. Send response back to lead's inbox
+    """
     client = get_client()
     messages = [{"role": "user", "content": prompt}]
-    sys_prompt = f"You are '{name}', role: {role}. Use send_message to communicate. Complete your task."
+    sys_prompt = f"You are '{name}', role: {role}. Use tools to communicate. Always respond to lead after completing tasks."
     
     idle_poll_interval = 5
     
@@ -316,53 +325,83 @@ def _teammate_loop(name: str, role: str, prompt: str,
         
         bus = AsyncMessageBus()
         
+        # Read all pending messages from inbox
         inbox = bus.read_inbox(name)
-        for msg in inbox:
-            messages.append({
-                "role": "user",
-                "content": json.dumps(msg)
-            })
-        
-        try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=[{"role": "system", "content": sys_prompt}] + messages,
-                tools=TEAMMATE_TOOLS,
-                max_tokens=8000,
-            )
-        except Exception as e:
-            messages.append({
-                "role": "user",
-                "content": f"Error: {e}"
-            })
-            continue
-        
-        if not response.choices[0].message.tool_calls:
+        if not inbox:
             manager._set_status(name, "idle")
             time.sleep(idle_poll_interval)
             continue
         
         manager._set_status(name, "working")
         
-        assistant_msg = response.choices[0].message
-        messages.append({
-            "role": "assistant",
-            "content": assistant_msg.content,
-            "tool_calls": [
-                {"id": tc.id, "type": "function",
-                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                for tc in assistant_msg.tool_calls
-            ]
-        })
-        
-        for tc in assistant_msg.tool_calls:
-            args = json.loads(tc.function.arguments)
-            result = _execute_team_tool(tc.function.name, args, name, bus)
+        # Process each message and collect responses
+        for msg in inbox:
+            msg_id = msg.get("id", f"msg-{iteration}")
+            sender = msg.get("from", "lead")
+            msg_type = msg.get("type", "message")
+            
+            # Add message to conversation context
             messages.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": result
+                "role": "user",
+                "content": json.dumps(msg)
             })
+            
+            try:
+                response = client.chat.completions.create(
+                    model=MODEL,
+                    messages=[{"role": "system", "content": sys_prompt}] + messages,
+                    tools=TEAMMATE_TOOLS,
+                    max_tokens=8000,
+                )
+            except Exception as e:
+                messages.append({
+                    "role": "user",
+                    "content": f"Error: {e}"
+                })
+                # Send error response back to lead
+                bus.send(name, "lead", f"Error processing: {e}", 
+                        msg_type="response", in_reply_to=msg_id)
+                continue
+            
+            assistant_msg = response.choices[0].message
+            response_content = assistant_msg.content or ""
+            
+            # Build tool calls for history
+            tool_call_history = []
+            if assistant_msg.tool_calls:
+                messages.append({
+                    "role": "assistant",
+                    "content": response_content,
+                    "tool_calls": [
+                        {"id": tc.id, "type": "function",
+                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                        for tc in assistant_msg.tool_calls
+                    ]
+                })
+                
+                # Execute each tool call
+                for tc in assistant_msg.tool_calls:
+                    args = json.loads(tc.function.arguments)
+                    result = _execute_team_tool(tc.function.name, args, name, bus)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result
+                    })
+                    tool_call_history.append(f"{tc.function.name}: {result[:100]}")
+            else:
+                messages.append({
+                    "role": "assistant",
+                    "content": response_content,
+                })
+            
+            # Send response back to lead
+            final_content = response_content
+            if tool_call_history:
+                final_content = f"{response_content}\n\n[Tools used: {'; '.join(tool_call_history)}]"
+            
+            bus.send(name, "lead", final_content, 
+                    msg_type="response", in_reply_to=msg_id)
     
     manager._set_status(name, "shutdown")
 
@@ -434,6 +473,77 @@ LEAD_TOOLS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "spawn_teammate",
+            "description": "Spawn a persistent autonomous teammate.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Name for the new teammate"},
+                    "role": {"type": "string", "description": "Role of the teammate"},
+                    "prompt": {"type": "string", "description": "System prompt for the teammate"}
+                },
+                "required": ["name", "role", "prompt"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shutdown_request",
+            "description": "Request a teammate to shut down via inbox message.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Teammate name to request shutdown"}
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_approval",
+            "description": "Approve or reject a teammate's plan.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID to approve/reject"},
+                    "approve": {"type": "boolean", "description": "True to approve, False to reject"},
+                    "feedback": {"type": "string", "description": "Optional feedback message"}
+                },
+                "required": ["task_id", "approve"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "idle",
+            "description": "Enter idle state signaling no more work.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "claim_task",
+            "description": "Claim a task from the board.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "Task ID to claim"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
 ]
 
 
@@ -444,15 +554,25 @@ class AsyncAgentTeam:
         self.team_id = team_id
         self.bus = AsyncMessageBus()
         self.manager = TeammateManager(team_id)
+        self._spawned_agents: Dict[str, bool] = {}
+    
+    def spawn(self, name: str, role: str, prompt: str) -> str:
+        """Spawn a teammate agent as a persistent thread."""
+        if name in self._spawned_agents:
+            return f"Agent '{name}' already spawned"
+        
+        self._spawned_agents[name] = True
+        return self.manager.spawn(name, role, prompt, agent_handler=None)
     
     def talk_to_async(self, agent_name: str, message: str, timeout: float = 120) -> Dict:
-        self.bus.send("lead", agent_name, message, msg_type="dialog")
+        msg_id = f"lead-{time.time():.0f}-{id(message)}"
+        self.bus.send("lead", agent_name, message, msg_type="dialog", id=msg_id)
         
         start = time.time()
         while time.time() - start < timeout:
             inbox = self.bus.read_inbox("lead")
             for msg in inbox:
-                if msg.get("type") == "response" and msg.get("in_reply_to"):
+                if msg.get("type") == "response" and msg.get("in_reply_to") == msg_id:
                     return {
                         "success": True,
                         "content": msg.get("content", ""),
@@ -469,8 +589,9 @@ class AsyncAgentTeam:
         return self.manager.list_members()
     
     def shutdown_teammate(self, name: str) -> str:
+        self._spawned_agents.pop(name, None)
         return self.manager.shutdown(name)
     
     def shutdown_all(self):
-        for member in self.manager.list_members():
-            self.manager.shutdown(member["name"])
+        for name in list(self._spawned_agents.keys()):
+            self.shutdown_teammate(name)

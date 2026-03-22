@@ -170,14 +170,16 @@ class TestTeammateManager:
         manager.shutdown("alice")
     
     def test_shutdown_transitions_state(self):
-        """shutdown() transitions member to shutdown state."""
+        """shutdown() sets shutdown flag and updates status."""
         from h_agent.team.async_team import TeammateManager
         
         manager = TeammateManager()
         mock_handler = MagicMock()
         
         manager.spawn("alice", "coder", "You are a coder", mock_handler)
-        assert manager.get_status("alice") == "working"
+        # With empty inbox, thread goes idle immediately
+        time.sleep(0.1)
+        assert manager.get_status("alice") == "idle"
         
         manager.shutdown("alice")
         # After shutdown, thread should eventually stop
@@ -221,9 +223,11 @@ class TestTeammateManager:
         manager.spawn("bob", "reviewer", "You are bob", mock_handler)
         manager.spawn("charlie", "devops", "You are charlie", mock_handler)
         
-        assert manager.get_status("alice") == "working"
-        assert manager.get_status("bob") == "working"
-        assert manager.get_status("charlie") == "working"
+        # With empty inboxes, threads go idle immediately
+        time.sleep(0.1)
+        assert manager.get_status("alice") == "idle"
+        assert manager.get_status("bob") == "idle"
+        assert manager.get_status("charlie") == "idle"
         
         manager.shutdown("alice")
         manager.shutdown("bob")

@@ -1,38 +1,83 @@
+#!/usr/bin/env python3
 """
-h_agent/delivery/queue.py - Disk-persistent delivery queue.
+h_agent/delivery/queue.py - s08 DeliveryQueue Implementation
 
-Write-ahead log: every outbound message is written to disk before delivery.
-On crash/restart, pending messages are recovered from disk.
-
-Atomic writes via tmp + os.replace().
+Write-ahead queue with atomic writes (tmp + fsync + os.replace).
 """
 
 import json
 import os
-import time
+import random
 import uuid
+import time
 from pathlib import Path
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Optional, List
 
-from h_agent.delivery.models import QueuedDelivery, MAX_RETRIES
+QUEUE_DIR = Path.home() / ".h-agent" / "delivery"
+MAX_RETRIES = 5
+BACKOFF_MS = [5_000, 25_000, 120_000, 600_000]
 
+@dataclass
+class QueuedDelivery:
+    """A queued delivery entry."""
+    id: str
+    channel: str
+    to: str
+    text: str
+    enqueued_at: float
+    next_retry_at: float = 0.0
+    retry_count: int = 0
+    last_error: str = ""
+    
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "channel": self.channel,
+            "to": self.to,
+            "text": self.text,
+            "enqueued_at": self.enqueued_at,
+            "next_retry_at": self.next_retry_at,
+            "retry_count": self.retry_count,
+            "last_error": self.last_error,
+        }
+    
+    @classmethod
+    def from_dict(cls, d: dict) -> "QueuedDelivery":
+        return cls(
+            id=d["id"],
+            channel=d["channel"],
+            to=d["to"],
+            text=d["text"],
+            enqueued_at=d["enqueued_at"],
+            next_retry_at=d.get("next_retry_at", 0.0),
+            retry_count=d.get("retry_count", 0),
+            last_error=d.get("last_error", ""),
+        )
+
+def compute_backoff_ms(retry_count: int) -> int:
+    """Exponential backoff with +/- 20% jitter."""
+    if retry_count <= 0:
+        return 0
+    idx = min(retry_count - 1, len(BACKOFF_MS) - 1)
+    base = BACKOFF_MS[idx]
+    jitter = random.randint(-base // 5, base // 5)
+    return max(0, base + jitter)
 
 class DeliveryQueue:
-    """Reliable FIFO delivery queue with disk persistence."""
-
-    def __init__(self, queue_dir: Optional[Path] = None, failed_dir: Optional[Path] = None):
-        self.queue_dir = queue_dir or self._default_queue_dir()
-        self.failed_dir = failed_dir or (self.queue_dir / "failed")
+    """
+    Disk-persisted write-ahead queue.
+    Enqueue writes to disk before attempting delivery.
+    """
+    
+    def __init__(self, queue_dir: Optional[Path] = None):
+        self.queue_dir = queue_dir or QUEUE_DIR
         self.queue_dir.mkdir(parents=True, exist_ok=True)
-        self.failed_dir.mkdir(parents=True, exist_ok=True)
-
-    def _default_queue_dir(self) -> Path:
-        """Get default queue directory in agent workspace."""
-        from h_agent.platform_utils import get_config_dir
-        return get_config_dir() / "delivery-queue"
-
-    def enqueue(self, channel: str, to: str, text: str, metadata: dict = None) -> str:
-        """Create a delivery entry and atomically write to disk. Returns delivery_id."""
+        self.failed_dir = self.queue_dir / "failed"
+        self.failed_dir.mkdir(exist_ok=True)
+    
+    def enqueue(self, channel: str, to: str, text: str) -> str:
+        """Enqueue a delivery - atomic write to disk first."""
         delivery_id = uuid.uuid4().hex[:12]
         entry = QueuedDelivery(
             id=delivery_id,
@@ -41,121 +86,95 @@ class DeliveryQueue:
             text=text,
             enqueued_at=time.time(),
             next_retry_at=0.0,
-            metadata=metadata or {},
         )
         self._write_entry(entry)
         return delivery_id
-
+    
     def _write_entry(self, entry: QueuedDelivery) -> None:
-        """Atomic write: tmp file + os.replace()."""
+        """Atomic write: tmp + fsync + os.replace."""
         final_path = self.queue_dir / f"{entry.id}.json"
         tmp_path = self.queue_dir / f".tmp.{os.getpid()}.{entry.id}.json"
+        
         data = json.dumps(entry.to_dict(), indent=2, ensure_ascii=False)
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())
+        
         os.replace(str(tmp_path), str(final_path))
-
+    
     def _read_entry(self, delivery_id: str) -> Optional[QueuedDelivery]:
+        """Read a queue entry from disk."""
         path = self.queue_dir / f"{delivery_id}.json"
         if not path.exists():
             return None
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                return QueuedDelivery.from_dict(json.load(f))
-        except (json.JSONDecodeError, KeyError, OSError):
+            return QueuedDelivery.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, KeyError):
             return None
-
-    def ack(self, delivery_id: str) -> None:
-        """Mark delivery as successful — remove from queue."""
+    
+    def ack(self, delivery_id: str) -> bool:
+        """Delivery succeeded - delete the queue file."""
         path = self.queue_dir / f"{delivery_id}.json"
-        try:
+        if path.exists():
             path.unlink()
-        except FileNotFoundError:
-            pass
-
+            return True
+        return False
+    
     def fail(self, delivery_id: str, error: str) -> None:
-        """Increment retry count. Move to failed/ if exhausted."""
+        """Increment retry_count, compute next retry time, or give up."""
         entry = self._read_entry(delivery_id)
-        if entry is None:
+        if not entry:
             return
+        
         entry.retry_count += 1
         entry.last_error = error
-        if entry.is_exhausted:
+        
+        if entry.retry_count >= MAX_RETRIES:
             self.move_to_failed(delivery_id)
             return
-        entry.compute_next_retry()
+        
+        entry.next_retry_at = time.time()
         self._write_entry(entry)
-
+    
     def move_to_failed(self, delivery_id: str) -> None:
+        """Move to failed directory after max retries."""
         src = self.queue_dir / f"{delivery_id}.json"
         dst = self.failed_dir / f"{delivery_id}.json"
-        try:
-            os.replace(str(src), str(dst))
-        except FileNotFoundError:
-            pass
-
+        if src.exists():
+            src.rename(dst)
+    
     def load_pending(self) -> List[QueuedDelivery]:
-        """Scan queue dir, load all pending entries sorted by enqueue time."""
-        entries: List[QueuedDelivery] = []
-        if not self.queue_dir.exists():
-            return entries
+        """Load all pending (not yet delivered) entries."""
+        entries = []
         for path in self.queue_dir.glob("*.json"):
-            if not path.is_file():
-                continue
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    entries.append(QueuedDelivery.from_dict(json.load(f)))
-            except (json.JSONDecodeError, KeyError, OSError):
-                continue
-        entries.sort(key=lambda e: e.enqueued_at)
-        return entries
-
+                entry = QueuedDelivery.from_dict(json.loads(path.read_text(encoding="utf-8")))
+                entries.append(entry)
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return sorted(entries, key=lambda e: e.enqueued_at)
+    
     def load_failed(self) -> List[QueuedDelivery]:
-        """Load all permanently failed entries."""
-        entries: List[QueuedDelivery] = []
-        if not self.failed_dir.exists():
-            return entries
+        """Load all failed entries."""
+        entries = []
         for path in self.failed_dir.glob("*.json"):
-            if not path.is_file():
-                continue
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    entries.append(QueuedDelivery.from_dict(json.load(f)))
-            except (json.JSONDecodeError, KeyError, OSError):
-                continue
-        entries.sort(key=lambda e: e.enqueued_at)
-        return entries
-
-    def retry_failed(self) -> int:
-        """Move all failed/ entries back to queue with reset retry count."""
+                entry = QueuedDelivery.from_dict(json.loads(path.read_text(encoding="utf-8")))
+                entries.append(entry)
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return sorted(entries, key=lambda e: e.enqueued_at)
+    
+    def _recovery_scan(self) -> int:
+        """On startup, retry pending entries from a previous crash."""
         count = 0
-        if not self.failed_dir.exists():
-            return count
-        for path in list(self.failed_dir.glob("*.json")):
-            if not path.is_file():
-                continue
+        for path in self.queue_dir.glob("*.json"):
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    entry = QueuedDelivery.from_dict(json.load(f))
-                entry.retry_count = 0
-                entry.last_error = None
-                entry.next_retry_at = 0.0
-                self._write_entry(entry)
-                path.unlink()
+                entry = QueuedDelivery.from_dict(json.loads(path.read_text(encoding="utf-8")))
+                if entry.next_retry_at > time.time():
+                    continue
                 count += 1
-            except (json.JSONDecodeError, KeyError, OSError):
-                continue
+            except (json.JSONDecodeError, KeyError):
+                pass
         return count
-
-    def stats(self) -> dict:
-        """Return queue statistics."""
-        pending = self.load_pending()
-        failed = self.load_failed()
-        return {
-            "pending": len(pending),
-            "failed": len(failed),
-            "queue_dir": str(self.queue_dir),
-        }
-

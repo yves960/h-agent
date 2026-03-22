@@ -304,6 +304,59 @@ class FullAgentHandler:
     
     def _setup_team_tools(self):
         """Setup team communication tools if team instance is available."""
+        from h_agent.team.async_team import AsyncMessageBus, LEAD_TOOLS, AsyncAgentTeam
+        
+        self.async_bus = AsyncMessageBus()
+        self.async_team = AsyncAgentTeam()
+        
+        for tool in LEAD_TOOLS:
+            self.tools.append(tool)
+        
+        def send_message_handler(to: str, content: str, msg_type: str = "message") -> str:
+            _ensure_teammate_running(to)
+            self.async_bus.send("lead", to, content, msg_type)
+            return f"Message sent to {to}"
+        
+        def broadcast_handler(content: str) -> str:
+            teammates = list(self.team.members.keys()) if self.team else []
+            for t in teammates:
+                _ensure_teammate_running(t)
+            return self.async_bus.broadcast("lead", teammates, content)
+        
+        def list_teammates_handler() -> str:
+            if not self.team:
+                return "No team"
+            members = self.team.list_members()
+            return "\n".join([f"- {m['name']} ({m['role']})" for m in members])
+        
+        def read_inbox_handler() -> str:
+            msgs = self.async_bus.read_inbox("lead")
+            if not msgs:
+                return "(no messages)"
+            return json.dumps(msgs, indent=2, ensure_ascii=False)
+        
+        def shutdown_teammate_handler(name: str) -> str:
+            self.async_team.shutdown_teammate(name)
+            if self.team:
+                return self.team.shutdown_teammate(name)
+            return "No team"
+        
+        def _ensure_teammate_running(agent_name: str) -> None:
+            member = self.team.get_member(agent_name) if self.team else None
+            if member:
+                prompt = getattr(member, '_prompt', '') or f"You are {agent_name}, role: {member.role.value}"
+                role = member.role.value
+            else:
+                prompt = f"You are {agent_name}"
+                role = "assistant"
+            self.async_team.spawn(agent_name, role, prompt)
+        
+        self.tool_handlers["send_message"] = send_message_handler
+        self.tool_handlers["broadcast"] = broadcast_handler
+        self.tool_handlers["list_teammates"] = list_teammates_handler
+        self.tool_handlers["read_inbox"] = read_inbox_handler
+        self.tool_handlers["shutdown_teammate"] = shutdown_teammate_handler
+        
         talk_to_tool = {
             "type": "function",
             "function": {
@@ -321,13 +374,73 @@ class FullAgentHandler:
         }
         self.tools.append(talk_to_tool)
         
+        import time
         def talk_to_handler(agent_name: str, message: str) -> str:
-            result = self.team.talk_to(agent_name, message, timeout=120)
-            if result.success:
-                return result.content or "(无回复)"
-            return f"Error: {result.error}"
+            _ensure_teammate_running(agent_name)
+            
+            msg_id = f"lead-{time.time():.0f}"
+            self.async_bus.send("lead", agent_name, message, msg_type="dialog", id=msg_id)
+            
+            start = time.time()
+            timeout = 120
+            while time.time() - start < timeout:
+                inbox = self.async_bus.read_inbox("lead")
+                for msg in inbox:
+                    if msg.get("type") == "response" and msg.get("in_reply_to") == msg_id:
+                        return msg.get("content", "(无回复)")
+                time.sleep(0.5)
+            
+            return f"Error: Timeout waiting for response from {agent_name}"
         
         self.tool_handlers["talk_to"] = talk_to_handler
+
+        # s09: spawn_teammate - spawn a persistent autonomous teammate
+        def spawn_teammate_handler(name: str, role: str, prompt: str) -> str:
+            return self.async_team.spawn(name, role, prompt)
+
+        # s10: shutdown_request - request teammate shutdown via inbox
+        def shutdown_request_handler(name: str) -> str:
+            import time
+            msg_id = f"shutdown-{time.time():.0f}"
+            self.async_bus.send("lead", name, "shutdown_request", msg_type="shutdown_request", id=msg_id)
+
+            # Wait for shutdown_response
+            start = time.time()
+            timeout = 30
+            while time.time() - start < timeout:
+                inbox = self.async_bus.read_inbox("lead")
+                for msg in inbox:
+                    if msg.get("type") == "shutdown_response" and msg.get("in_reply_to") == msg_id:
+                        approved = msg.get("approved", True)
+                        return "approved" if approved else "rejected"
+                time.sleep(0.5)
+            return "timeout waiting for shutdown_response"
+
+        # s10: plan_approval - approve or reject a teammate's plan
+        def plan_approval_handler(task_id: str, approve: bool, feedback: str = "") -> str:
+            import time
+            msg_id = f"plan-approval-{time.time():.0f}"
+            content = json.dumps({"task_id": task_id, "approve": approve, "feedback": feedback})
+            self.async_bus.send("lead", task_id, content, msg_type="plan_approval", id=msg_id)
+            return f"Plan {'approved' if approve else 'rejected'} for task {task_id}"
+
+        # s12: idle - enter idle state
+        def idle_handler() -> str:
+            return "idle"
+
+        # s12: claim_task - claim a task from the board
+        def claim_task_handler(task_id: str) -> str:
+            # Update task owner to current agent via async_team
+            if hasattr(self.async_team, 'claim_task'):
+                return self.async_team.claim_task(task_id, self.agent_name)
+            # Fallback: just acknowledge
+            return f"Claimed task {task_id}"
+
+        self.tool_handlers["spawn_teammate"] = spawn_teammate_handler
+        self.tool_handlers["shutdown_request"] = shutdown_request_handler
+        self.tool_handlers["plan_approval"] = plan_approval_handler
+        self.tool_handlers["idle"] = idle_handler
+        self.tool_handlers["claim_task"] = claim_task_handler
     
     def build_messages(self, task_content: str) -> List[dict]:
         """构建发送给 LLM 的消息列表。"""
@@ -344,11 +457,23 @@ class FullAgentHandler:
         if self.team:
             system_prompt += """
 
-## 团队协作工具使用说明
-当你需要与团队成员通信时，必须使用 talk_to 工具！
-- 通过 tool_calls 机制调用 talk_to，不是输出代码
-- 绝对不要在回复文本中输出 talk_to(...) 代码
-- 示例正确调用：响应中包含 tool_call，API会自动执行 talk_to"""
+## 团队协作规则
+当你需要与团队成员通信时，必须使用 talk_to 工具通过 tool_calls 调用。
+
+**委托任务规则**：
+- 用户请求"运行测试"、"执行命令"、"生成报告"等任务时，必须委托给团队成员
+- 禁止直接用 bash 等工具执行用户请求的任务
+- 你的角色是协调者，不是执行者
+
+**正确方式** - 在响应中包含 tool_calls：
+{"tool_calls": [{"type": "function", "id": "xxx", "function": {"name": "talk_to", "arguments": "{\"agent_name\": \"开发\", \"message\": \"任务\"}"}}]}
+
+**错误方式** - 在 content 中输出 talk_to(...) 这样的代码片段，或直接用 bash 执行用户请求的任务
+
+**绝对禁止**：
+- 在 content 文本中写 talk_to(agent_name="开发", message="...")
+- 输出任何类似 talk_to(...) 的代码文本
+- 直接用 bash 执行用户请求的任务（如 pytest、测试、生成报告等）"""
         
         result_messages = [{"role": "system", "content": system_prompt}]
         

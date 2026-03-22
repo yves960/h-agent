@@ -22,6 +22,7 @@ from datetime import datetime
 from typing import Any, List, Dict, Optional
 from dataclasses import dataclass, field, asdict
 from h_agent.core.client import get_client
+from h_agent.features.subagents import run_subagent
 
 client = get_client()
 MODEL = os.getenv("MODEL_ID", "gpt-4o")
@@ -32,6 +33,11 @@ WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 CONTEXT_SAFE_LIMIT = 180000  # tokens
 MAX_TOOL_OUTPUT = 50000
 SESSION_TTL_DAYS = int(os.getenv("H_AGENT_SESSION_TTL_DAYS", "30"))  # Default 30 days
+
+# Global references for tool handlers (set by SessionAwareAgent)
+_global_agent_id = "default"
+_global_context_guard = None
+_global_session_store = None
 
 # Platform detection for file locking
 IS_WINDOWS = sys.platform == "win32"
@@ -375,6 +381,111 @@ def tool_write(file_path: str, content: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
+def tool_background_run(command: str) -> str:
+    from h_agent.features.tasks import background_runner
+    task_id = background_runner.run(command)
+    return task_id
+
+def tool_check_background(task_id: str) -> str:
+    from h_agent.features.tasks import background_runner
+    result = background_runner.check(task_id)
+    if result is None:
+        return f"Error: Task {task_id} not found"
+    if result["running"]:
+        return f"Task {task_id} is running"
+    return f"Task {task_id} completed with return code {result['return_code']}\n{result['output']}"
+
+def tool_task_create(title: str, description: str = "", priority: str = "medium") -> str:
+    from h_agent.features.tasks import task_manager
+    task_id = task_manager.create(title, description, priority)
+    return task_id
+
+def tool_task_get(task_id: str) -> str:
+    from h_agent.features.tasks import task_manager
+    task = task_manager.get(task_id)
+    if task is None:
+        return f"Error: Task {task_id} not found"
+    import json
+    return json.dumps(task, indent=2, ensure_ascii=False)
+
+def tool_task_update(task_id: str, status: str = None, owner: str = None) -> str:
+    from h_agent.features.tasks import task_manager
+    success = task_manager.update(task_id, status, owner)
+    if not success:
+        return f"Error: Task {task_id} not found"
+    return f"Task {task_id} updated"
+
+def tool_task_list() -> str:
+    from h_agent.features.tasks import task_manager
+    tasks = task_manager.list_all()
+    if not tasks:
+        return "No tasks"
+    import json
+    return json.dumps(tasks, indent=2, ensure_ascii=False)
+
+def tool_edit_file(file_path: str, old_text: str, new_text: str) -> str:
+    try:
+        path = WORKSPACE_DIR / file_path
+        if not path.exists():
+            return f"Error: File not found"
+        content = path.read_text(encoding="utf-8")
+        if old_text not in content:
+            return f"Error: Text not found"
+        if content.count(old_text) > 1:
+            return f"Error: Multiple matches ({content.count(old_text)} found). Be more specific."
+        path.write_text(content.replace(old_text, new_text, 1), encoding="utf-8")
+        return f"Edited successfully"
+    except Exception as e:
+        return f"Error: {e}"
+
+def tool_todo_write(todos: List[dict]) -> str:
+    global _global_agent_id
+    try:
+        todo_dir = Path.home() / ".h-agent" / _global_agent_id
+        todo_dir.mkdir(parents=True, exist_ok=True)
+        todo_file = todo_dir / "todos.json"
+        todo_file.write_text(json.dumps(todos, indent=2, ensure_ascii=False), encoding="utf-8")
+        return f"Saved {len(todos)} todos"
+    except Exception as e:
+        return f"Error: {e}"
+
+def tool_compress() -> str:
+    global _global_context_guard, _global_session_store
+    if _global_context_guard is None or _global_session_store is None:
+        return "Error: No active session"
+    try:
+        messages = _global_session_store.load_session()
+        before_count = len(messages)
+        compacted = _global_context_guard.compact_messages(messages)
+        after_count = len(compacted)
+        removed = before_count - after_count
+        return f"Compressed {before_count} messages to {after_count} ({removed} removed)"
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def tool_delegate(task: str, context: str = "") -> str:
+    """
+    Spawn a subagent with fresh context to handle a focused task.
+    The subagent shares the filesystem but not conversation history.
+    Only the result is returned to the parent - context stays clean.
+    
+    Args:
+        task: The task for the subagent to complete
+        context: Additional context (file paths, previous findings, etc.)
+    """
+    try:
+        result = run_subagent(task=task, context=context)
+        return json.dumps({
+            "success": result.success,
+            "result": result.content,
+            "steps": result.steps,
+            "error": result.error
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
 TOOLS = [
     {"type": "function", "function": {"name": "bash", "description": "Run shell command",
         "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
@@ -382,9 +493,43 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {"file_path": {"type": "string"}}, "required": ["file_path"]}}},
     {"type": "function", "function": {"name": "write", "description": "Write file",
         "parameters": {"type": "object", "properties": {"file_path": {"type": "string"}, "content": {"type": "string"}}, "required": ["file_path", "content"]}}},
+    {"type": "function", "function": {"name": "background_run", "description": "Run command in background thread.",
+        "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
+    {"type": "function", "function": {"name": "check_background", "description": "Check background task status.",
+        "parameters": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}}},
+    {"type": "function", "function": {"name": "task_create", "description": "Create a persistent file task.",
+        "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}}, "required": ["title"]}}},
+    {"type": "function", "function": {"name": "task_get", "description": "Get task details by ID.",
+        "parameters": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}}},
+    {"type": "function", "function": {"name": "task_update", "description": "Update task status or details.",
+        "parameters": {"type": "object", "properties": {"task_id": {"type": "string"}, "status": {"type": "string"}, "owner": {"type": "string"}}}}},
+    {"type": "function", "function": {"name": "task_list", "description": "List all tasks.",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "edit_file", "description": "Replace exact text in file.",
+        "parameters": {"type": "object", "properties": {"file_path": {"type": "string"}, "old_text": {"type": "string"}, "new_text": {"type": "string"}}, "required": ["file_path", "old_text", "new_text"]}}},
+    {"type": "function", "function": {"name": "TodoWrite", "description": "Update task tracking list.",
+        "parameters": {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["in_progress", "completed", "pending"]}, "priority": {"type": "string", "enum": ["high", "medium", "low"]}}}}}, "required": ["todos"]}}},
+    {"type": "function", "function": {"name": "compress", "description": "Manually compress conversation context.",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "delegate", "description": "Spawn a subagent with fresh context. Use for complex analysis, file exploration, or parallel work. The subagent shares filesystem but not conversation history.",
+        "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "The task for the subagent"}, "context": {"type": "string", "description": "Additional context (file paths, previous findings)"}}, "required": ["task"]}}},
 ]
 
-TOOL_HANDLERS = {"bash": tool_bash, "read": tool_read, "write": tool_write}
+TOOL_HANDLERS = {
+    "bash": tool_bash,
+    "read": tool_read,
+    "write": tool_write,
+    "background_run": tool_background_run,
+    "check_background": tool_check_background,
+    "task_create": tool_task_create,
+    "task_get": tool_task_get,
+    "task_update": tool_task_update,
+    "task_list": tool_task_list,
+    "edit_file": tool_edit_file,
+    "TodoWrite": tool_todo_write,
+    "compress": tool_compress,
+    "delegate": tool_delegate,
+}
 
 
 def execute_tool_call(tool_call) -> str:
@@ -400,9 +545,13 @@ class SessionAwareAgent:
     """带会话持久化的 Agent。"""
     
     def __init__(self, agent_id: str = "default"):
+        global _global_agent_id, _global_context_guard, _global_session_store
         self.agent_id = agent_id
         self.session_store = SessionStore(agent_id)
         self.context_guard = ContextGuard()
+        _global_agent_id = agent_id
+        _global_context_guard = self.context_guard
+        _global_session_store = self.session_store
     
     def get_system_prompt(self) -> str:
         return f"You are a helpful AI assistant at {WORKSPACE_DIR}. Use tools to help the user."

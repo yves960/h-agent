@@ -1,211 +1,106 @@
+#!/usr/bin/env python3
 """
-h_agent/concurrency/heartbeat.py - Heartbeat integration with CommandQueue lanes.
+h_agent/concurrency/heartbeat.py - s07 Heartbeat Implementation
 
-Replaces the raw threading.Lock in the original heartbeat with a lane-aware
-lock using the heartbeat lane. This allows heartbeat tasks to be properly
-serialized and tracked alongside cron and main lane tasks.
+Lane mutual exclusion + should_run() preconditions.
 """
 
-import os
-import time
 import threading
-import signal
-import subprocess
-from datetime import datetime
+import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Optional, Tuple
+from datetime import datetime
 
-from h_agent.concurrency.lanes import CommandQueue, LANE_HEARTBEAT, LaneQueue
-from h_agent.scheduler.store import (
-    get_heartbeat_state,
-    save_heartbeat_state,
-    list_cron_jobs,
-    update_cron_job,
-    save_execution,
-    ExecutionRecord,
-    is_heartbeat_running,
-    generate_job_id,
-)
-from h_agent.scheduler.cron import CronExpression, get_next_run_time
+lane_lock = threading.Lock()
 
 
-DEFAULT_INTERVAL = 60  # seconds
-
-
-class HeartbeatMonitor:
-    """Heartbeat monitor that uses CommandQueue lanes for concurrency control."""
-
+class HeartbeatRunner:
     def __init__(
         self,
-        command_queue: Optional[CommandQueue] = None,
-        interval: int = DEFAULT_INTERVAL,
+        heartbeat_path: Path,
+        interval: float = 60.0,
+        active_hours: Tuple[int, int] = (0, 24),
     ):
-        self._cmd_queue = command_queue or CommandQueue()
-        self._lane = self._cmd_queue.get_or_create_lane(LANE_HEARTBEAT, max_concurrency=1)
+        self.heartbeat_path = Path(heartbeat_path)
         self.interval = interval
+        self.active_hours = active_hours
+
         self.running = False
+        self.last_run_at = 0.0
         self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
-        self._last_check = 0.0
-        self._task_count = 0
-        self._executions = 0
+        self._stopped = False
+        self._last_output = ""
+        self._queue_lock = threading.Lock()
+        self._output_queue = []
 
-    @property
-    def status(self) -> Dict[str, Any]:
-        return {
-            "running": self.running,
-            "interval": self.interval,
-            "last_check": self._last_check,
-            "task_count": self._task_count,
-            "executions": self._executions,
-            "pid": os.getpid() if self.running else None,
-            "lane_stats": self._lane.stats(),
-        }
+    def should_run(self) -> Tuple[bool, str]:
+        if not self.heartbeat_path.exists():
+            return False, "HEARTBEAT.md not found"
 
-    def _check_tasks(self) -> List[Dict[str, Any]]:
-        """Check and execute due cron jobs."""
-        results = []
-        now = time.time()
-        jobs = list_cron_jobs()
-        self._task_count = len(jobs)
+        if not self.heartbeat_path.read_text(encoding="utf-8").strip():
+            return False, "HEARTBEAT.md is empty"
 
-        for job in jobs:
-            if not job.enabled:
-                continue
+        elapsed = time.time() - self.last_run_at
+        if elapsed < self.interval:
+            return False, f"interval not elapsed ({self.interval - elapsed:.0f}s remaining)"
 
-            try:
-                cron = CronExpression(job.expression)
-                if cron.matches():
-                    result = self._execute_job(job)
-                    results.append(result)
-                    self._executions += 1
+        hour = datetime.now().hour
+        s, e = self.active_hours
+        in_hours = (s <= hour < e) if s <= e else not (e <= hour < s)
+        if not in_hours:
+            return False, f"outside active hours ({s}:00-{e}:00)"
 
-                    next_run = get_next_run_time(job.expression)
-                    update_cron_job(job.id, {
-                        "last_run": now,
-                        "next_run": next_run.timestamp() if next_run else None,
-                    })
-            except ValueError:
-                continue
-
-        self._last_check = now
-        return results
-
-    def _execute_job(self, job) -> Dict[str, Any]:
-        """Execute a single cron job via the heartbeat lane."""
-        record = ExecutionRecord(
-            id=generate_job_id(),
-            task_id=job.id,
-            task_type="cron",
-            started_at=time.time(),
-        )
-
-        try:
-            result = subprocess.run(
-                job.command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            record.completed_at = time.time()
-            record.success = result.returncode == 0
-            record.output = result.stdout[:4096]
-            record.error = result.stderr[:4096]
-            record.exit_code = result.returncode
-        except subprocess.TimeoutExpired:
-            record.completed_at = time.time()
-            record.success = False
-            record.error = "Execution timed out (5 minute limit)"
-            record.exit_code = -1
-        except Exception as e:
-            record.completed_at = time.time()
-            record.success = False
-            record.error = str(e)
-            record.exit_code = -1
-
-        save_execution(record)
-        return {
-            "job_id": job.id,
-            "job_name": job.name,
-            "success": record.success,
-            "output": record.output[:200] if record.output else "",
-            "error": record.error[:200] if record.error else "",
-        }
-
-    def _heartbeat_loop(self) -> None:
-        """Main heartbeat loop."""
-        def signal_handler(signum, frame):
-            self._stop_event.set()
-
-        try:
-            signal.signal(signal.SIGTERM, signal_handler)
-            signal.signal(signal.SIGINT, signal_handler)
-        except (ValueError, OSError):
-            pass
-
-        save_heartbeat_state({
-            "running": True,
-            "pid": os.getpid(),
-            "started_at": time.time(),
-            "interval": self.interval,
-        })
-
-        while not self._stop_event.is_set():
-            try:
-                results = self._check_tasks()
-                if results:
-                    for r in results:
-                        status = "✓" if r["success"] else "✗"
-                        print(f"[Heartbeat] {status} {r['job_name']}")
-
-                save_heartbeat_state({
-                    "running": True,
-                    "pid": os.getpid(),
-                    "started_at": get_heartbeat_state().get("started_at", time.time()),
-                    "last_check": self._last_check,
-                    "interval": self.interval,
-                    "executions": self._executions,
-                })
-            except Exception as e:
-                print(f"[Heartbeat] Error in check loop: {e}")
-
-            self._stop_event.wait(self.interval)
-
-        save_heartbeat_state({"running": False, "stopped_at": time.time()})
-
-    def start(self, blocking: bool = False) -> bool:
-        """Start the heartbeat monitor."""
         if self.running:
-            print("[Heartbeat] Already running")
-            return False
+            return False, "already running"
+
+        return True, "all checks passed"
+
+    def _execute(self) -> None:
+        acquired = lane_lock.acquire(blocking=False)
+        if not acquired:
+            return
 
         self.running = True
-        self._stop_event.clear()
+        try:
+            instructions = self.heartbeat_path.read_text(encoding="utf-8")
+            response = self._run_agent_single_turn(instructions)
+            meaningful = self._parse_response(response)
+            if meaningful and meaningful.strip() != self._last_output:
+                self._last_output = meaningful.strip()
+                with self._queue_lock:
+                    self._output_queue.append(meaningful)
+        finally:
+            self.running = False
+            self.last_run_at = time.time()
+            lane_lock.release()
 
-        if blocking:
-            self._heartbeat_loop()
-        else:
-            self._thread = threading.Thread(
-                target=self._heartbeat_loop,
-                name="heartbeat",
-                daemon=True,
-            )
-            self._thread.start()
-        return True
+    def _run_agent_single_turn(self, instructions: str) -> str:
+        return "HEARTBEAT_OK"
 
-    def stop(self) -> bool:
-        """Stop the heartbeat monitor."""
-        if not self.running:
-            return False
+    def _parse_response(self, response: str) -> str:
+        if response.strip() == "HEARTBEAT_OK":
+            return ""
+        return response
 
-        self._stop_event.set()
-        if self._thread and self._thread.is_alive():
+    def start(self, daemon: bool = True) -> None:
+        self._stopped = False
+        self._thread = threading.Thread(target=self._heartbeat_loop, daemon=daemon)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stopped = True
+        if self._thread:
             self._thread.join(timeout=5)
 
-        self.running = False
-        return True
+    def _heartbeat_loop(self) -> None:
+        while not self._stopped:
+            ok, reason = self.should_run()
+            if ok:
+                self._execute()
+            time.sleep(1)
 
-    def run_once(self) -> List[Dict[str, Any]]:
-        """Run a single heartbeat check (for manual triggers)."""
-        return self._check_tasks()
+    def get_output(self) -> list:
+        with self._queue_lock:
+            output = list(self._output_queue)
+            self._output_queue.clear()
+            return output

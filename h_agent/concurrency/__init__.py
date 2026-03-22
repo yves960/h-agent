@@ -4,34 +4,40 @@ h_agent/concurrency/__init__.py - Named lane concurrency module.
 Provides:
 - LaneQueue: a named FIFO queue with max_concurrency control
 - CommandQueue: central dispatcher routing work to named lanes
-- Generation tracking for graceful task invalidation on restart
+- HeartbeatRunner: Background heartbeat with lane mutual exclusion
+- CronService: Cron service with 3 schedule types, auto-disable after 5 errors
+- CronJob: Scheduled job definition
 
 Usage:
-    from h_agent.concurrency import CommandQueue, LANE_MAIN, LANE_CRON, LANE_HEARTBEAT
+    from h_agent.concurrency import HeartbeatRunner, CronService, CronJob, lane_lock
 
-    q = CommandQueue()
-    q.get_or_create_lane(LANE_MAIN, max_concurrency=1)
+    runner = HeartbeatRunner(heartbeat_path=Path("HEARTBEAT.md"))
+    runner.start()
 
-    # Enqueue work into a lane, get a Future
-    future = q.enqueue(LANE_MAIN, lambda: expensive_computation())
-    result = future.result(timeout=60)
-
-    # Reset all lanes (invalidates old generation tasks)
-    q.reset_all()
+    service = CronService()
+    service.start()
 """
 
 from h_agent.concurrency.lanes import (
     LaneQueue,
     CommandQueue,
+    LaneStats,
     LANE_MAIN,
     LANE_CRON,
     LANE_HEARTBEAT,
 )
+from h_agent.concurrency.heartbeat import HeartbeatRunner, lane_lock
+from h_agent.concurrency.cron import CronService, CronJob
 
 __all__ = [
     "LaneQueue",
     "CommandQueue",
+    "LaneStats",
     "LANE_MAIN",
     "LANE_CRON",
     "LANE_HEARTBEAT",
+    "HeartbeatRunner",
+    "CronService",
+    "CronJob",
+    "lane_lock",
 ]

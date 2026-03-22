@@ -48,29 +48,10 @@ def get_full_agent_handler(agent_id: str):
         profile = AgentLoader.load_profile(agent_id)
         team = get_team()
         
-        talk_to_tool = {
-            "type": "function",
-            "function": {
-                "name": "talk_to",
-                "description": "向团队成员发送消息并获取回复。用于与团队成员对话交流。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "agent_name": {"type": "string", "description": "目标agent名称"},
-                        "message": {"type": "string", "description": "要发送的消息内容"},
-                    },
-                    "required": ["agent_name", "message"]
-                }
-            }
-        }
-        
-        talk_handler = get_team_talk_handler(team)
-        
         _full_agent_handlers[agent_id] = FullAgentHandler(
             agent_id, 
             profile,
-            extra_tools=[talk_to_tool],
-            extra_handlers={"talk_to": talk_handler}
+            team_instance=team
         )
     return _full_agent_handlers[agent_id]
 
