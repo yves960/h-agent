@@ -23,6 +23,7 @@ from typing import Any, List, Dict, Optional
 from dataclasses import dataclass, field, asdict
 from h_agent.core.client import get_client
 from h_agent.features.subagents import run_subagent
+from h_agent.logging_config import get_llm_logger, get_agent_logger, trace
 
 client = get_client()
 MODEL = os.getenv("MODEL_ID", "gpt-4o")
@@ -579,7 +580,12 @@ class SessionAwareAgent:
         messages = [{"role": "system", "content": self.get_system_prompt()}] + messages
         
         # Agent 循环
+        turn = 0
         while True:
+            turn += 1
+            agent_name = getattr(self, 'agent_id', 'single-agent')
+            log_llm_call(agent_name, messages, TOOLS, MODEL)
+            
             response = client.chat.completions.create(
                 model=MODEL,
                 messages=messages,
@@ -595,11 +601,15 @@ class SessionAwareAgent:
                 # 保存并返回
                 self.session_store.save_turn("user", user_input)
                 self.session_store.save_turn("assistant", message.content)
+                trace(f"[{agent_name}] Response (no tools): {message.content[:100] if message.content else ''}", "llm")
                 return message.content or ""
             
             # 执行工具
             for tool_call in message.tool_calls:
+                args = json.loads(tool_call.function.arguments) if hasattr(tool_call.function, 'arguments') else {}
+                trace(f"[{agent_name}] Tool call: {tool_call.function.name}", "tool")
                 result = execute_tool_call(tool_call)
+                get_agent_logger().log_tool_call(agent_name, tool_call.function.name, args, result)
                 messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
     
     def list_sessions(self) -> List[dict]:

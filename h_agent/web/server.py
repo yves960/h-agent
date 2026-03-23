@@ -100,6 +100,7 @@ def get_agent_tools():
 async def run_agent_async(messages: list, q: queue.Queue, session_id: str = None, mgr = None):
     """Run the agent loop and put SSE events into a queue."""
     from openai import OpenAI
+    from h_agent.logging_config import get_llm_logger, get_agent_logger, trace
     
     client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     tools = get_agent_tools()
@@ -107,10 +108,14 @@ async def run_agent_async(messages: list, q: queue.Queue, session_id: str = None
     
     api_messages = [{"role": "system", "content": system_prompt}] + messages
     full_response = ""
+    agent_name = "web-agent"
     
     try:
         while True:
             try:
+                log_llm_call(agent_name, api_messages, tools, MODEL)
+                trace(f"[{agent_name}] Calling LLM with {len(api_messages)} messages", "llm")
+                
                 response = client.chat.completions.create(
                     model=MODEL,
                     messages=api_messages,
@@ -141,12 +146,14 @@ async def run_agent_async(messages: list, q: queue.Queue, session_id: str = None
                     key = list(args_dict.keys())[0] if args_dict else ""
                     val = args_dict.get(key, "")[:60] if key else ""
                     q.put(("tool_start", {"name": tool_call.function.name, "args": val}))
+                    trace(f"[{agent_name}] Tool: {tool_call.function.name} args={val}", "tool")
                     
                     result = execute_tool_call(tool_call)
                     if len(result) > 50000:
                         result = result[:25000] + "\n...[truncated]\n" + result[-25000:]
                     
                     q.put(("tool_end", {"name": tool_call.function.name, "result": result[:500]}))
+                    get_agent_logger().log_tool_call(agent_name, tool_call.function.name, args_dict, result)
                     q.put(("token", {"content": f"[Tool result: {result[:200]}]\n"}))
                     full_response += f"[Tool result: {result[:200]}]\n"
                     
