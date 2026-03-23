@@ -64,16 +64,36 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 def get_agent_tools():
     """Get tools list compatible with the agent."""
+    from h_agent.features.sessions import TOOLS as SESSION_TOOLS
+    from h_agent.features.skills import TOOLS as SKILL_TOOLS
+    
     tools = []
-    for t in CORE_TOOLS:
-        tools.append({
-            "type": "function",
-            "function": {
-                "name": t["function"]["name"],
-                "description": t["function"]["description"],
-                "parameters": t["function"].get("parameters", {})
-            }
-        })
+    seen_names = set()
+    
+    for t in SESSION_TOOLS:
+        if t["function"]["name"] not in seen_names:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": t["function"]["name"],
+                    "description": t["function"]["description"],
+                    "parameters": t["function"].get("parameters", {})
+                }
+            })
+            seen_names.add(t["function"]["name"])
+    
+    for t in SKILL_TOOLS:
+        if t["function"]["name"] not in seen_names:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": t["function"]["name"],
+                    "description": t["function"]["description"],
+                    "parameters": t["function"].get("parameters", {})
+                }
+            })
+            seen_names.add(t["function"]["name"])
+    
     return tools
 
 

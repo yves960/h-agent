@@ -293,7 +293,15 @@ class FullAgentHandler:
         if extra_tools:
             self.tools.extend(extra_tools)
         
+        from h_agent.features.skills import TOOLS as SKILL_TOOLS, TOOL_HANDLERS as SKILL_HANDLERS
+        existing_names = {t["function"]["name"] for t in self.tools}
+        for tool in SKILL_TOOLS:
+            if tool["function"]["name"] not in existing_names:
+                self.tools.append(tool)
+                existing_names.add(tool["function"]["name"])
+        
         self.tool_handlers = dict(CORE_HANDLERS)
+        self.tool_handlers.update(SKILL_HANDLERS)
         if extra_handlers:
             self.tool_handlers.update(extra_handlers)
         
