@@ -576,7 +576,10 @@ class AsyncAgentTeam:
     def spawn(self, name: str, role: str, prompt: str) -> str:
         """Spawn a teammate agent as a persistent thread."""
         if name in self._spawned_agents:
-            return f"Agent '{name}' already spawned"
+            thread = self.threads.get(name)
+            if thread and thread.is_alive():
+                return f"Agent '{name}' already spawned"
+            del self._spawned_agents[name]
         
         self._spawned_agents[name] = True
         return self.manager.spawn(name, role, prompt, agent_handler=None)
