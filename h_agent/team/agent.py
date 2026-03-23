@@ -13,6 +13,7 @@ h_agent/team/agent.py - Full-Featured Team Agent
 
 import os
 import json
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Generator, Iterator
 from dataclasses import dataclass, field
@@ -323,8 +324,19 @@ class FullAgentHandler:
         
         def send_message_handler(to: str, content: str, msg_type: str = "message") -> str:
             _ensure_teammate_running(to)
-            self.async_bus.send("lead", to, content, msg_type)
-            return f"Message sent to {to}"
+            msg_id = f"lead-{time.time():.0f}"
+            self.async_bus.send("lead", to, content, msg_type, in_reply_to=msg_id)
+            
+            start = time.time()
+            timeout = 120
+            while time.time() - start < timeout:
+                inbox = self.async_bus.read_inbox("lead")
+                for msg in inbox:
+                    if msg.get("type") == "response" and msg.get("in_reply_to") == msg_id:
+                        return f"[{to}]: {msg.get('content', '(无回复)')}"
+                time.sleep(0.5)
+            
+            return f"Error: Timeout waiting for response from {to}"
         
         def broadcast_handler(content: str) -> str:
             teammates = list(self.team.members.keys()) if self.team else []
