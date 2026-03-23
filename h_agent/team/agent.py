@@ -365,43 +365,6 @@ class FullAgentHandler:
         self.tool_handlers["list_teammates"] = list_teammates_handler
         self.tool_handlers["read_inbox"] = read_inbox_handler
         self.tool_handlers["shutdown_teammate"] = shutdown_teammate_handler
-        
-        talk_to_tool = {
-            "type": "function",
-            "function": {
-                "name": "talk_to",
-                "description": "向团队成员发送消息并获取回复。用于与团队成员对话交流。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "agent_name": {"type": "string", "description": "目标agent名称"},
-                        "message": {"type": "string", "description": "要发送的消息内容"},
-                    },
-                    "required": ["agent_name", "message"]
-                }
-            }
-        }
-        self.tools.append(talk_to_tool)
-        
-        import time
-        def talk_to_handler(agent_name: str, message: str) -> str:
-            _ensure_teammate_running(agent_name)
-            
-            msg_id = f"lead-{time.time():.0f}"
-            self.async_bus.send("lead", agent_name, message, msg_type="dialog", id=msg_id)
-            
-            start = time.time()
-            timeout = 120
-            while time.time() - start < timeout:
-                inbox = self.async_bus.read_inbox("lead")
-                for msg in inbox:
-                    if msg.get("type") == "response" and msg.get("in_reply_to") == msg_id:
-                        return msg.get("content", "(无回复)")
-                time.sleep(0.5)
-            
-            return f"Error: Timeout waiting for response from {agent_name}"
-        
-        self.tool_handlers["talk_to"] = talk_to_handler
 
         # s09: spawn_teammate - spawn a persistent autonomous teammate
         def spawn_teammate_handler(name: str, role: str, prompt: str) -> str:
@@ -467,7 +430,7 @@ class FullAgentHandler:
             system_prompt += """
 
 ## 团队协作规则
-当你需要与团队成员通信时，必须使用 talk_to 工具通过 tool_calls 调用。
+当你需要与团队成员通信时，使用 send_message 工具通过 tool_calls 调用。
 
 **委托任务规则**：
 - 用户请求"运行测试"、"执行命令"、"生成报告"等任务时，必须委托给团队成员
@@ -475,14 +438,19 @@ class FullAgentHandler:
 - 你的角色是协调者，不是执行者
 
 **正确方式** - 在响应中包含 tool_calls：
-{"tool_calls": [{"type": "function", "id": "xxx", "function": {"name": "talk_to", "arguments": "{\"agent_name\": \"开发\", \"message\": \"任务\"}"}}]}
+{"tool_calls": [{"type": "function", "id": "xxx", "function": {"name": "send_message", "arguments": "{\"to\": \"开发\", \"content\": \"任务描述\"}"}}]}
 
-**错误方式** - 在 content 中输出 talk_to(...) 这样的代码片段，或直接用 bash 执行用户请求的任务
+**错误方式** - 在 content 中输出 send_message(...) 这样的代码片段，或直接用 bash 执行用户请求的任务
 
 **绝对禁止**：
-- 在 content 文本中写 talk_to(agent_name="开发", message="...")
-- 输出任何类似 talk_to(...) 的代码文本
-- 直接用 bash 执行用户请求的任务（如 pytest、测试、生成报告等）"""
+- 在 content 文本中写 send_message(to="开发", content="...")
+- 输出任何类似 send_message(...) 的代码文本
+- 直接用 bash 执行用户请求的任务（如 pytest、测试、生成报告等）
+
+**消息流程**：
+1. 使用 send_message 发送任务给队友
+2. 在下一轮对话前，系统会自动检查你的 inbox 获取队友的响应
+3. 你会收到 <inbox> 标签包裹的队友消息"""
         
         result_messages = [{"role": "system", "content": system_prompt}]
         
@@ -588,6 +556,20 @@ class FullAgentHandler:
             
             for turn in range(max_turns):
                 agent_name = getattr(self, 'agent_name', 'unknown')
+                
+                # Check inbox for teammate messages before LLM call (s09 pattern)
+                if hasattr(self, 'async_bus'):
+                    inbox_msgs = self.async_bus.read_inbox("lead")
+                    if inbox_msgs:
+                        inbox_content = "\n".join([
+                            f"[From: {m.get('from', '?')}] {m.get('content', '')}"
+                            for m in inbox_msgs
+                        ])
+                        messages.append({
+                            "role": "user",
+                            "content": f"<inbox>\n{inbox_content}\n</inbox>"
+                        })
+                
                 log_llm_call(agent_name, messages, self.tools, MODEL)
                 
                 response = self.client.chat.completions.create(
