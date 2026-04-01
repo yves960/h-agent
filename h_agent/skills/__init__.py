@@ -1,14 +1,15 @@
 """
-h_agent/skills - Skill System for h-agent
+h_agent/skills - Skill System
 
-Skills are optional plugins that provide specialized capabilities like
-Office automation (Word, Excel, PowerPoint) and Outlook integration.
-
-Unlike core plugins, skills can be:
-- Installed via pip (h_agent_skills_<name>)
-- Placed in local skills directory
-- Auto-discovered and loaded on demand
+This package provides two skill systems:
+1. New Skill System: Skill, SkillContext, SkillResult, SkillRegistry
+2. Legacy Plugin System: Office, Outlook, and other plugin-based skills
 """
+
+# === New Skill System (similar to Claude Code skills) ===
+from h_agent.skills.base import Skill, SkillContext, SkillResult
+from h_agent.skills.registry import SkillRegistry, get_skill_registry
+from h_agent.skills.loader import register_builtin_skills
 
 import os
 import sys
