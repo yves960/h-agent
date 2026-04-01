@@ -199,7 +199,11 @@ h-agent chat --session my  # 使用指定会话
 聊天模式支持以下命令：
 - `/clear` - 清空历史
 - `/history` - 查看消息数量
+- `/sessions` - 列出所有保存的会话
+- `/resume [id]` - 恢复指定会话（或最新会话）
 - `q` / `exit` / 空行 - 退出
+
+> 💡 **会话持久化**：h-agent 自动保存每次对话到 `~/.h-agent/sessions/`，重启后可使用 `/resume` 恢复上下文。
 
 ### h-agent config
 
@@ -220,6 +224,8 @@ h-agent config --wizard             # 运行交互式设置向导
 ## 内置工具
 
 h-agent 提供丰富的内置工具，Agent 可自动调用。
+
+> 💡 **并发安全**：部分工具（`read`）标记为只读并发安全，可与其他只读工具并行执行。写入类工具（`write`, `bash`）会串行执行以避免竞态条件。
 
 ### 核心工具
 
