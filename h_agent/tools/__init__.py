@@ -13,6 +13,12 @@ from h_agent.tools.file_read import FileReadTool
 from h_agent.tools.file_write import FileWriteTool
 from h_agent.tools.file_edit import FileEditTool
 
+# New tools: glob, grep, web_fetch, web_search
+from h_agent.tools.glob import GlobTool
+from h_agent.tools.grep import GrepTool
+from h_agent.tools.web_fetch import WebFetchTool
+from h_agent.tools.web_search import WebSearchTool
+
 __all__ = [
     "Tool",
     "ToolResult",
@@ -22,4 +28,8 @@ __all__ = [
     "FileReadTool",
     "FileWriteTool",
     "FileEditTool",
+    "GlobTool",
+    "GrepTool",
+    "WebFetchTool",
+    "WebSearchTool",
 ]

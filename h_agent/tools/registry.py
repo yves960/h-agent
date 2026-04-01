@@ -263,11 +263,19 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     from h_agent.tools.file_read import FileReadTool
     from h_agent.tools.file_write import FileWriteTool
     from h_agent.tools.file_edit import FileEditTool
+    from h_agent.tools.glob import GlobTool
+    from h_agent.tools.grep import GrepTool
+    from h_agent.tools.web_fetch import WebFetchTool
+    from h_agent.tools.web_search import WebSearchTool
 
     registry.register(BashTool())
     registry.register(FileReadTool())
     registry.register(FileWriteTool())
     registry.register(FileEditTool())
+    registry.register(GlobTool())
+    registry.register(GrepTool())
+    registry.register(WebFetchTool())
+    registry.register(WebSearchTool())
 
 
 def register_tool(tool: Tool) -> None:
