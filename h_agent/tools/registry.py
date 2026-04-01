@@ -269,6 +269,14 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     from h_agent.tools.web_search import WebSearchTool
     from h_agent.tools.skill import SkillTool
     from h_agent.tools.mcp_tool import MCPTool
+    from h_agent.tools.lsp import LSPTool
+    from h_agent.tools.notebook import NotebookEditTool
+    from h_agent.tools.plan import EnterPlanModeTool, ExitPlanModeTool
+    from h_agent.tools.worktree import EnterWorktreeTool, ExitWorktreeTool
+    from h_agent.tools.todo import TodoWriteTool
+    from h_agent.tools.ask import AskUserQuestionTool
+    from h_agent.tools.sleep import SleepTool
+    from h_agent.tools.schedule import ScheduleCronTool
 
     registry.register(BashTool())
     registry.register(FileReadTool())
@@ -280,6 +288,16 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     registry.register(WebSearchTool())
     registry.register(SkillTool())
     registry.register(MCPTool())
+    registry.register(LSPTool())
+    registry.register(NotebookEditTool())
+    registry.register(EnterPlanModeTool())
+    registry.register(ExitPlanModeTool())
+    registry.register(EnterWorktreeTool())
+    registry.register(ExitWorktreeTool())
+    registry.register(TodoWriteTool())
+    registry.register(AskUserQuestionTool())
+    registry.register(SleepTool())
+    registry.register(ScheduleCronTool())
 
 
 def register_tool(tool: Tool) -> None:

@@ -18,6 +18,14 @@ from h_agent.tools.glob import GlobTool
 from h_agent.tools.grep import GrepTool
 from h_agent.tools.web_fetch import WebFetchTool
 from h_agent.tools.web_search import WebSearchTool
+from h_agent.tools.lsp import LSPTool
+from h_agent.tools.notebook import NotebookEditTool
+from h_agent.tools.plan import EnterPlanModeTool, ExitPlanModeTool
+from h_agent.tools.worktree import EnterWorktreeTool, ExitWorktreeTool
+from h_agent.tools.todo import TodoWriteTool
+from h_agent.tools.ask import AskUserQuestionTool
+from h_agent.tools.sleep import SleepTool
+from h_agent.tools.schedule import ScheduleCronTool
 
 __all__ = [
     "Tool",
@@ -32,4 +40,14 @@ __all__ = [
     "GrepTool",
     "WebFetchTool",
     "WebSearchTool",
+    "LSPTool",
+    "NotebookEditTool",
+    "EnterPlanModeTool",
+    "ExitPlanModeTool",
+    "EnterWorktreeTool",
+    "ExitWorktreeTool",
+    "TodoWriteTool",
+    "AskUserQuestionTool",
+    "SleepTool",
+    "ScheduleCronTool",
 ]
