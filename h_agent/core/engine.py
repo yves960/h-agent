@@ -64,6 +64,7 @@ class StreamEventType(Enum):
     COMPLETE = "complete"        # Response complete
     ERROR = "error"              # Error occurred
     USAGE = "usage"              # Token usage info
+    PERMISSION_ASK = "permission_ask"  # Permission check requires user confirmation
 
 
 @dataclass
@@ -298,6 +299,7 @@ class QueryEngine:
         max_turns: int = 100,
         pricing: Optional[dict] = None,
         tool_registry=None,
+        permission_context=None,
     ):
         """
         Initialize the QueryEngine.
@@ -313,6 +315,7 @@ class QueryEngine:
             max_turns: Max tool call iterations
             pricing: Custom pricing dict
             tool_registry: ToolRegistry instance for dispatch
+            permission_context: PermissionContext for permission checks
         """
         self.client = client or self._create_client()
         self.model = model
@@ -324,6 +327,7 @@ class QueryEngine:
         self.max_turns = max_turns
         self.pricing = pricing or DEFAULT_PRICING
         self.tool_registry = tool_registry
+        self.permission_context = permission_context
         
         self.token_counter = TokenCounter(model)
         self.total_usage = UsageInfo()
@@ -468,6 +472,16 @@ class QueryEngine:
                 content_buffer += delta.content
                 yield StreamEvent(type=StreamEventType.CONTENT, content=delta.content)
             
+            # Handle reasoning_content (for thinking models like deepseek-reasoner)
+            # reasoning_content is a direct attribute on the delta, not inside tool_calls
+            if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                reasoning = delta.reasoning_content
+                yield StreamEvent(
+                    type=StreamEventType.THINKING,
+                    content=reasoning,
+                )
+                thinking_buffer += reasoning
+            
             # Handle tool calls
             if delta.tool_calls:
                 for tool_call_delta in delta.tool_calls:
@@ -490,15 +504,15 @@ class QueryEngine:
                         if tool_call_delta.function.arguments:
                             tool_call_buffer["arguments"] += tool_call_delta.function.arguments
                     
-                    if tool_call_delta.type == "reasoning":
-                        # Thinking content (for models that support it)
-                        reasoning = tool_call_delta.get("reasoning_content", "")
-                        if reasoning:
-                            yield StreamEvent(
-                                type=StreamEventType.THINKING,
-                                content=reasoning,
-                            )
-                            thinking_buffer += reasoning
+                    # Handle reasoning_content for thinking models (e.g., deepseek-reasoner)
+                    # Check if the delta has reasoning_content attribute
+                    if hasattr(tool_call_delta, 'reasoning_content') and tool_call_delta.reasoning_content:
+                        reasoning = tool_call_delta.reasoning_content
+                        yield StreamEvent(
+                            type=StreamEventType.THINKING,
+                            content=reasoning,
+                        )
+                        thinking_buffer += reasoning
                 
                 continue  # Don't set finish_reason yet
             
@@ -546,6 +560,7 @@ class QueryEngine:
         tools: Optional[List[dict]] = None,
         system_prompt: Optional[str] = None,
         tool_handler: Optional[Callable] = None,
+        event_callback: Optional[Callable[[StreamEvent], None]] = None,
     ) -> str:
         """
         Run the full tool call loop until completion.
@@ -555,6 +570,7 @@ class QueryEngine:
             tools: Override tools
             system_prompt: Override system prompt
             tool_handler: Function(name, args) -> str, or ToolRegistry
+            event_callback: Optional callback for handling stream events
             
         Returns:
             Final assistant message content
@@ -582,6 +598,10 @@ class QueryEngine:
                 system_prompt=system_prompt,
                 stream=True,
             ):
+                # Pass event to callback if provided
+                if event_callback:
+                    event_callback(event)
+                
                 if event.type == StreamEventType.CONTENT:
                     content_parts.append(event.content)
                 elif event.type == StreamEventType.TOOL_CALL:

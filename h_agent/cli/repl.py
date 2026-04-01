@@ -243,25 +243,41 @@ class REPL:
         # Add user message
         self.messages.append({"role": "user", "content": prompt})
         
-        # Show thinking indicator
-        print(f"{Colors.DIM}", end="", flush=True)
+        # Use event callback for handling streaming events
+        thinking_buffer = []
+        
+        def handle_event(event):
+            """Handle streaming events."""
+            from h_agent.core.engine import StreamEventType
+            
+            if event.type == StreamEventType.THINKING:
+                # Gray/dim display for thinking content
+                thinking_buffer.append(event.content)
+                print(f"{Colors.DIM}{event.content}{Colors.RESET}", end="", flush=True)
+            elif event.type == StreamEventType.CONTENT:
+                # Normal display for content
+                print(event.content, end="", flush=True)
+            elif event.type == StreamEventType.PERMISSION_ASK:
+                # Permission ask event
+                print(f"\n{Colors.YELLOW}[Permission Check]{Colors.RESET} {event.content}")
         
         try:
-            # Run the tool loop
+            # Run the tool loop with event callback
             final_content = await self.engine.run_tool_loop(
                 messages=self.messages,
                 system_prompt=self.system_prompt,
+                event_callback=handle_event,
             )
             
-            # Print response
-            print(f"{Colors.RESET}", end="")
-            if final_content:
+            # Print final newline if content was streamed
+            if thinking_buffer or final_content:
+                print("\n")
+            
+            # Print response if not already shown
+            if final_content and not thinking_buffer:
                 print(f"\n{final_content}\n")
-            else:
-                print()
         
         except Exception as e:
-            print(f"{Colors.RESET}")
             print_error(f"Query failed: {e}")
 
     def run(self, initial_prompt: Optional[str] = None):

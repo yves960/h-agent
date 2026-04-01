@@ -12,6 +12,22 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Callable, Optional
 
+# Permission system integration
+try:
+    from h_agent.permissions import (
+        PermissionContext,
+        PermissionChecker,
+        PermissionResult,
+        PermissionDecision,
+    )
+    HAS_PERMISSIONS = True
+except ImportError:
+    HAS_PERMISSIONS = False
+    PermissionContext = None
+    PermissionChecker = None
+    PermissionResult = None
+    PermissionDecision = None
+
 
 @dataclass
 class ToolResult:
@@ -156,6 +172,33 @@ class Tool(ABC):
         with progress updates.
         """
         return await self.execute(args)
+
+    def check_permissions(
+        self,
+        args: dict,
+        context: Optional[PermissionContext] = None,
+    ) -> PermissionResult:
+        """
+        Check if this tool execution is permitted.
+        
+        Args:
+            args: Tool arguments
+            context: Permission context (uses default if None)
+            
+        Returns:
+            PermissionResult with decision and reasoning
+        """
+        if not HAS_PERMISSIONS or context is None:
+            # No permission system or no context = allow
+            return PermissionResult(
+                decision=PermissionDecision.ALLOW if PermissionDecision else "allow",
+                reason="No permission context provided",
+                risk_level="low",
+                requires_confirmation=False,
+            )
+        
+        checker = PermissionChecker(context)
+        return checker.check(self.name, args)
 
 
 class AsyncTool(Tool):
