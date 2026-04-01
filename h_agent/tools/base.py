@@ -119,6 +119,8 @@ class Tool(ABC):
         class ReadTool(Tool):
             name = "read"
             description = "Read a file"
+            concurrency_safe = True  # Can be executed in parallel with other safe tools
+            read_only = True  # Does not modify files
             
             @property
             def input_schema(self) -> dict:
@@ -142,6 +144,8 @@ class Tool(ABC):
     # Tool metadata - override in subclass
     name: str = ""
     description: str = ""
+    concurrency_safe: bool = False  # Whether tool can be safely executed in parallel
+    read_only: bool = False  # Whether tool only reads, never writes
 
     @property
     @abstractmethod

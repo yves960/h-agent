@@ -11,6 +11,8 @@ import asyncio
 import os
 import signal
 import sys
+import uuid
+from datetime import datetime
 from typing import List, Optional
 
 # Optional: questionary for fancy prompts
@@ -22,6 +24,7 @@ except ImportError:
 
 from h_agent.commands import CommandContext, get_registry
 from h_agent.tools import get_registry as get_tool_registry
+from h_agent.session import Transcript, Message, SessionStorage
 
 
 # ============================================================
@@ -128,6 +131,8 @@ class REPL:
         engine=None,
         system_prompt: Optional[str] = None,
         welcome_message: Optional[str] = None,
+        session_id: Optional[str] = None,
+        storage: SessionStorage = None,
     ):
         """
         Initialize REPL.
@@ -136,10 +141,18 @@ class REPL:
             engine: QueryEngine instance
             system_prompt: System prompt to use
             welcome_message: Custom welcome message
+            session_id: Optional session ID for resume, or None to create new
+            storage: Optional SessionStorage instance
         """
         self.engine = engine
         self.system_prompt = system_prompt or self._default_system_prompt()
         self.welcome_message = welcome_message or self._default_welcome()
+        
+        # Session persistence
+        self.storage = storage or SessionStorage()
+        self.session_id = session_id or self.storage.generate_session_id()
+        model = engine.model if engine else "unknown"
+        self.transcript = Transcript.create(self.session_id, model)
         
         self.messages: List[dict] = []
         self.context = CommandContext(
@@ -243,6 +256,14 @@ class REPL:
         # Add user message
         self.messages.append({"role": "user", "content": prompt})
         
+        # Track user message in transcript
+        self.transcript.add_message(Message(
+            role="user",
+            content=prompt,
+            timestamp=datetime.now().isoformat(),
+            tokens=0,
+        ))
+        
         # Use event callback for handling streaming events
         thinking_buffer = []
         
@@ -279,9 +300,28 @@ class REPL:
             # Print response if not already shown
             if final_content and not thinking_buffer:
                 print(f"\n{final_content}\n")
+            
+            # Track assistant message in transcript
+            tokens_used = self.engine.total_usage.total_tokens if self.engine else 0
+            self.transcript.add_message(Message(
+                role="assistant",
+                content=final_content or "",
+                timestamp=datetime.now().isoformat(),
+                tokens=tokens_used,
+            ))
+            
+            # Save transcript after each interaction
+            self._save_transcript()
         
         except Exception as e:
             print_error(f"Query failed: {e}")
+    
+    def _save_transcript(self):
+        """Save the current transcript to disk."""
+        try:
+            self.storage.save_session(self.transcript)
+        except Exception as e:
+            print_warning(f"Failed to save session: {e}")
 
     def run(self, initial_prompt: Optional[str] = None):
         """

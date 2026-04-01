@@ -62,6 +62,8 @@ class BashTool(Tool):
 
     name = "bash"
     description = "Execute a shell command. Use for file operations, git, running scripts, etc."
+    concurrency_safe = False  # Bash commands may have side effects
+    read_only = False
 
     @property
     def input_schema(self) -> dict:

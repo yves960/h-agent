@@ -649,25 +649,17 @@ class QueryEngine:
                     
                     # Execute tools if any
                     if tool_calls:
-                        for tc in tool_calls:
-                            # Execute tool
-                            if tool_handler:
-                                result = await tool_handler(tc.tool_name, tc.tool_args)
-                            else:
-                                result = f"Error: No tool handler registered"
-                            
-                            if isinstance(result, dict) and hasattr(result, 'output'):
-                                result_str = result.output
-                            elif isinstance(result, dict):
-                                result_str = json.dumps(result)
-                            else:
-                                result_str = str(result)
-                            
-                            # Add tool result message
+                        # Use parallel execution for safe tools
+                        tool_results = await self.execute_tools_parallel(
+                            tool_calls, tool_handler
+                        )
+                        
+                        # Add tool result messages in order
+                        for result_dict in tool_results:
                             messages.append({
                                 "role": "tool",
-                                "tool_call_id": tc.tool_call_id,
-                                "content": result_str,
+                                "tool_call_id": result_dict["tool_call_id"],
+                                "content": result_dict["content"],
                             })
                         
                         # Continue loop for next response
@@ -758,6 +750,123 @@ class QueryEngine:
     def reset_usage(self) -> None:
         """Reset usage counters."""
         self.total_usage = UsageInfo()
+
+    def _is_tool_concurrency_safe(self, tool_name: str) -> bool:
+        """
+        Check if a tool is concurrency-safe.
+        
+        Args:
+            tool_name: Name of the tool
+            
+        Returns:
+            True if tool can be safely executed in parallel
+        """
+        if not self.tool_registry:
+            return False
+        tool = self.tool_registry.get(tool_name)
+        if tool:
+            return getattr(tool, "concurrency_safe", False)
+        return False
+
+    async def _execute_single_tool(
+        self,
+        tool_name: str,
+        tool_args: dict,
+        tool_handler,
+    ) -> tuple[str, str]:
+        """
+        Execute a single tool and return (result_str, error).
+        
+        Args:
+            tool_name: Name of the tool
+            tool_args: Arguments dict
+            tool_handler: Tool handler function or registry
+            
+        Returns:
+            Tuple of (result_string, error_message)
+        """
+        try:
+            result = await tool_handler(tool_name, tool_args)
+            if isinstance(result, dict) and hasattr(result, 'output'):
+                result_str = result.output
+            elif isinstance(result, dict):
+                result_str = json.dumps(result)
+            else:
+                result_str = str(result)
+            return result_str, ""
+        except Exception as e:
+            return "", str(e)
+
+    async def execute_tools_parallel(
+        self,
+        tool_calls: List[StreamEvent],
+        tool_handler,
+    ) -> List[dict]:
+        """
+        Execute multiple tool calls with parallelization for safe tools.
+        
+        Groups tools by concurrency_safe flag:
+        - Safe tools (read-only like file_read) are executed in parallel
+        - Unsafe tools are executed serially
+        
+        Args:
+            tool_calls: List of StreamEvent objects with tool_call_id, tool_name, tool_args
+            tool_handler: Tool handler (function or ToolRegistry)
+            
+        Returns:
+            List of result dicts with tool_call_id, content, and success
+        """
+        if not tool_calls:
+            return []
+        
+        # Group tool calls by concurrency safety
+        safe_tools = []  # (stream_event, tool_name, tool_args)
+        unsafe_tools = []  # (stream_event, tool_name, tool_args)
+        
+        for tc in tool_calls:
+            if self._is_tool_concurrency_safe(tc.tool_name):
+                safe_tools.append(tc)
+            else:
+                unsafe_tools.append(tc)
+        
+        results_map = {}  # tool_call_id -> result_dict
+        
+        # Execute safe tools in parallel
+        if safe_tools:
+            tasks = [
+                self._execute_single_tool(tc.tool_name, tc.tool_args, tool_handler)
+                for tc in safe_tools
+            ]
+            safe_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for tc, result in zip(safe_tools, safe_results):
+                if isinstance(result, Exception):
+                    results_map[tc.tool_call_id] = {
+                        "tool_call_id": tc.tool_call_id,
+                        "content": f"Error: {str(result)}",
+                        "success": False,
+                    }
+                else:
+                    result_str, error = result
+                    results_map[tc.tool_call_id] = {
+                        "tool_call_id": tc.tool_call_id,
+                        "content": result_str if not error else f"Error: {error}",
+                        "success": error == "",
+                    }
+        
+        # Execute unsafe tools serially (in order)
+        for tc in unsafe_tools:
+            result_str, error = await self._execute_single_tool(
+                tc.tool_name, tc.tool_args, tool_handler
+            )
+            results_map[tc.tool_call_id] = {
+                "tool_call_id": tc.tool_call_id,
+                "content": result_str if not error else f"Error: {error}",
+                "success": error == "",
+            }
+        
+        # Return results in original order
+        return [results_map[tc.tool_call_id] for tc in tool_calls]
 
 
 # ============================================================

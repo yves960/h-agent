@@ -52,6 +52,8 @@ class FileReadTool(Tool):
 
     name = "read"
     description = "Read the contents of a file. Supports text, images, and PDFs."
+    concurrency_safe = True  # Read-only operation, safe for parallel execution
+    read_only = True
 
     @property
     def input_schema(self) -> dict:
