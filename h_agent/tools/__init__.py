@@ -1,29 +1,25 @@
 """
-h_agent/tools - Built-in tool modules
+h_agent/tools/__init__.py - Tool System
 
-This package contains modular tool definitions:
-- git: Git operations (status, commit, push, pull, log, branch)
-- file_ops: File operations (read, write, edit, glob)
-- shell: Shell command execution
-- docker: Docker operations (ps, logs, exec, images)
-- http_client: HTTP GET/POST/HEAD requests
-- json_utils: JSON parse/format/query tools
+Modern tool system inspired by Claude Code's Tool architecture.
 """
 
-from .git import TOOLS as GIT_TOOLS, TOOL_HANDLERS as GIT_HANDLERS
-from .file_ops import TOOLS as FILE_TOOLS, TOOL_HANDLERS as FILE_HANDLERS
-from .shell import TOOLS as SHELL_TOOLS, TOOL_HANDLERS as SHELL_HANDLERS
-from .docker import TOOLS as DOCKER_TOOLS, TOOL_HANDLERS as DOCKER_HANDLERS
-from .http_client import TOOLS as HTTP_TOOLS, TOOL_HANDLERS as HTTP_HANDLERS
-from .json_utils import TOOLS as JSON_TOOLS, TOOL_HANDLERS as JSON_HANDLERS
+from h_agent.tools.base import Tool, ToolResult
+from h_agent.tools.registry import ToolRegistry, get_registry
 
-# Combined tools and handlers for all built-in tools
-ALL_TOOLS = GIT_TOOLS + FILE_TOOLS + SHELL_TOOLS + DOCKER_TOOLS + HTTP_TOOLS + JSON_TOOLS
-ALL_HANDLERS = {
-    **GIT_HANDLERS,
-    **FILE_HANDLERS,
-    **SHELL_HANDLERS,
-    **DOCKER_HANDLERS,
-    **HTTP_HANDLERS,
-    **JSON_HANDLERS,
-}
+# Convenience imports for built-in tools
+from h_agent.tools.bash import BashTool
+from h_agent.tools.file_read import FileReadTool
+from h_agent.tools.file_write import FileWriteTool
+from h_agent.tools.file_edit import FileEditTool
+
+__all__ = [
+    "Tool",
+    "ToolResult",
+    "ToolRegistry",
+    "get_registry",
+    "BashTool",
+    "FileReadTool",
+    "FileWriteTool",
+    "FileEditTool",
+]
