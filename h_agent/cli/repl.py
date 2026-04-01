@@ -260,6 +260,9 @@ class REPL:
             elif event.type == StreamEventType.PERMISSION_ASK:
                 # Permission ask event
                 print(f"\n{Colors.YELLOW}[Permission Check]{Colors.RESET} {event.content}")
+            elif event.type == StreamEventType.PROGRESS:
+                # Progress update with animation
+                print(f"\r\033[K{Colors.YELLOW}⏳ {event.content}{Colors.RESET}", end="", flush=True)
         
         try:
             # Run the tool loop with event callback

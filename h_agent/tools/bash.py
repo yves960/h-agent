@@ -7,12 +7,13 @@ Inspired by Claude Code's BashTool.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import subprocess
 import threading
 import sys
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 from h_agent.tools.base import Tool, ToolResult
 
@@ -160,7 +161,11 @@ class BashTool(Tool):
         stderr = "".join(stderr_lines)
         return stdout, stderr
 
-    async def execute(self, args: dict) -> ToolResult:
+    async def execute(
+        self,
+        args: dict,
+        progress_callback: Optional[callable] = None,
+    ) -> ToolResult:
         """
         Execute a shell command.
         
@@ -169,6 +174,7 @@ class BashTool(Tool):
                 - command: str (required)
                 - timeout: int (optional, default 120)
                 - cwd: str (optional)
+            progress_callback: Optional callback for progress updates
         """
         command = args.get("command", "")
         timeout = min(args.get("timeout", DEFAULT_TIMEOUT), MAX_TIMEOUT)
@@ -242,7 +248,79 @@ class BashTool(Tool):
         except Exception as e:
             return ToolResult.err(f"Execution error: {str(e)}")
 
-    def execute_sync(self, args: dict) -> ToolResult:
+    async def execute_with_progress(self, args: dict) -> AsyncGenerator[str, None]:
+        """
+        Execute command and yield output in real-time.
+        
+        Args:
+            args: dict with keys:
+                - command: str (required)
+                - timeout: int (optional, default 120)
+                - cwd: str (optional)
+                
+        Yields:
+            Progress/output lines as they come
+        """
+        command = args.get("command", "")
+        timeout = min(args.get("timeout", DEFAULT_TIMEOUT), MAX_TIMEOUT)
+        cwd = args.get("cwd") or os.getcwd()
+
+        if not command:
+            yield "Error: No command provided"
+            return
+
+        if self._is_dangerous(command):
+            yield f"Dangerous command blocked: {command[:50]}..."
+            return
+
+        env = os.environ.copy()
+        env["TERM"] = env.get("TERM", "dumb")
+
+        try:
+            # Create async subprocess
+            process = await asyncio.create_subprocess_shell(
+                command,
+                cwd=cwd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+
+            # Set timeout
+            try:
+                await asyncio.wait_for(
+                    self._stream_process_output(process),
+                    timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                process.kill()
+                yield f"Command timed out after {timeout}s"
+
+        except Exception as e:
+            yield f"Execution error: {str(e)}"
+
+    async def _stream_process_output(self, process: asyncio.subprocess.Process) -> AsyncGenerator[str, None]:
+        """Stream output from a subprocess."""
+        # Stream stdout
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            decoded = line.decode().strip()
+            if decoded:
+                yield decoded
+
+        # Stream stderr (after stdout is done)
+        stderr_data = await process.stderr.read()
+        if stderr_data:
+            for line in stderr_data.decode().splitlines():
+                if line.strip():
+                    yield line.strip()
+
+        # Wait for process to complete
+        await process.wait()
+
+    def execute_sync(self, args: dict, progress_callback: Optional[callable] = None) -> ToolResult:
         """Synchronous execution for use in thread pools."""
         import asyncio
         try:
@@ -254,10 +332,10 @@ class BashTool(Tool):
                     future = pool.submit(self._execute_sync_impl, args)
                     return future.result()
             else:
-                return loop.run_until_complete(self.execute(args))
+                return loop.run_until_complete(self.execute(args, progress_callback))
         except RuntimeError:
             # No event loop, create one
-            return asyncio.run(self.execute(args))
+            return asyncio.run(self.execute(args, progress_callback))
 
     def _execute_sync_impl(self, args: dict) -> ToolResult:
         """Internal sync implementation."""

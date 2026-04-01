@@ -32,6 +32,17 @@ except ImportError:
     tiktoken = None
     HAS_TIKTOKEN = False
 
+# Optional: error types for enhanced error handling
+try:
+    from h_agent.errors import AgentError, ErrorType, ErrorRecovery, classify_exception
+    HAS_ERROR_TYPES = True
+except ImportError:
+    HAS_ERROR_TYPES = False
+    AgentError = None
+    ErrorType = None
+    ErrorRecovery = None
+    classify_exception = None
+
 from openai import OpenAI
 
 # Try to import newer OpenAI types, fall back to older
@@ -55,12 +66,13 @@ except ImportError:
 # Types
 # ============================================================
 
-class StreamEventType(Enum):
+class StreamEventType(str, Enum):
     """Types of events yielded by the streaming run."""
     CONTENT = "content"           # Text content chunk
     TOOL_CALL = "tool_call"      # Tool call detected
     TOOL_RESULT = "tool_result"  # Tool execution result
     THINKING = "thinking"        # Thinking/reasoning content
+    PROGRESS = "progress"        # Progress update (for long-running tools)
     COMPLETE = "complete"        # Response complete
     ERROR = "error"              # Error occurred
     USAGE = "usage"              # Token usage info
@@ -300,6 +312,8 @@ class QueryEngine:
         pricing: Optional[dict] = None,
         tool_registry=None,
         permission_context=None,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
     ):
         """
         Initialize the QueryEngine.
@@ -316,6 +330,8 @@ class QueryEngine:
             pricing: Custom pricing dict
             tool_registry: ToolRegistry instance for dispatch
             permission_context: PermissionContext for permission checks
+            max_retries: Max retry attempts for retryable errors
+            retry_delay: Initial delay between retries (exponential backoff)
         """
         self.client = client or self._create_client()
         self.model = model
@@ -328,6 +344,8 @@ class QueryEngine:
         self.pricing = pricing or DEFAULT_PRICING
         self.tool_registry = tool_registry
         self.permission_context = permission_context
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         
         self.token_counter = TokenCounter(model)
         self.total_usage = UsageInfo()
@@ -666,6 +684,66 @@ class QueryEngine:
                 break
         
         return final_content
+
+    async def run_tool_loop_with_retry(
+        self,
+        messages: List[dict],
+        tools: Optional[List[dict]] = None,
+        system_prompt: Optional[str] = None,
+        tool_handler: Optional[Callable] = None,
+        event_callback: Optional[Callable[[StreamEvent], None]] = None,
+    ) -> str:
+        """
+        Run the tool loop with automatic retry on retryable errors.
+        
+        Args:
+            messages: Conversation messages (modified in place)
+            tools: Override tools
+            system_prompt: Override system prompt
+            tool_handler: Function(name, args) -> str, or ToolRegistry
+            event_callback: Optional callback for handling stream events
+            
+        Returns:
+            Final assistant message content
+        """
+        last_error = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                return await self.run_tool_loop(
+                    messages=messages,
+                    tools=tools,
+                    system_prompt=system_prompt,
+                    tool_handler=tool_handler,
+                    event_callback=event_callback,
+                )
+            except Exception as e:
+                last_error = e
+                
+                # Classify the error if we have error types
+                if HAS_ERROR_TYPES and classify_exception:
+                    agent_error = classify_exception(e)
+                    
+                    if agent_error.retryable and attempt < self.max_retries - 1:
+                        # Exponential backoff
+                        delay = self.retry_delay * (2 ** attempt)
+                        await asyncio.sleep(delay)
+                        continue
+                    elif not agent_error.retryable:
+                        # Non-retryable error, raise immediately
+                        raise
+                elif attempt < self.max_retries - 1:
+                    # No error classification, use basic retry
+                    delay = self.retry_delay * (2 ** attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    # Final attempt failed
+                    raise
+        
+        # Should not reach here, but just in case
+        if last_error:
+            raise last_error
 
     def get_usage(self) -> UsageInfo:
         """Get total token usage."""

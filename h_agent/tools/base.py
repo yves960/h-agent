@@ -12,6 +12,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Callable, Optional
 
+# Error types for enhanced error handling
+try:
+    from h_agent.errors import AgentError, ErrorType
+    HAS_ERROR_TYPES = True
+except ImportError:
+    HAS_ERROR_TYPES = False
+    ErrorType = None
+    AgentError = None
+
 # Permission system integration
 try:
     from h_agent.permissions import (
@@ -38,10 +47,14 @@ class ToolResult:
         success: Whether the tool execution succeeded
         output: The output content (text or error message)
         error: Optional error message if success is False
+        error_type: Optional error type for classification (ErrorType enum)
+        retryable: Whether this error can be retried
     """
     success: bool
     output: str
     error: Optional[str] = None
+    error_type: Optional[Any] = None  # ErrorType when errors module available
+    retryable: bool = False
 
     @classmethod
     def ok(cls, output: str) -> "ToolResult":
@@ -49,17 +62,22 @@ class ToolResult:
         return cls(success=True, output=output)
 
     @classmethod
-    def err(cls, error: str, output: str = "") -> "ToolResult":
+    def err(cls, error: str, output: str = "", error_type: Optional[Any] = None, retryable: bool = False) -> "ToolResult":
         """Create an error result."""
-        return cls(success=False, output=output, error=error)
+        return cls(success=False, output=output, error=error, error_type=error_type, retryable=retryable)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
-        return {
+        result = {
             "success": self.success,
             "output": self.output,
             "error": self.error,
         }
+        if HAS_ERROR_TYPES and self.error_type:
+            result["error_type"] = self.error_type.value if hasattr(self.error_type, 'value') else str(self.error_type)
+        if self.retryable:
+            result["retryable"] = True
+        return result
 
 
 @dataclass
@@ -139,17 +157,40 @@ class Tool(ABC):
         pass
 
     @abstractmethod
-    async def execute(self, args: dict) -> ToolResult:
+    async def execute(
+        self,
+        args: dict,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> ToolResult:
         """
         Execute the tool with the given arguments.
         
         Args:
             args: Dictionary of arguments matching input_schema
+            progress_callback: Optional callback for progress updates
             
         Returns:
             ToolResult with the execution outcome
         """
         pass
+
+    async def execute_with_progress(self, args: dict) -> AsyncGenerator[str, None]:
+        """
+        Execute with streaming progress updates.
+        
+        Override in subclasses to support long-running operations
+        with progress reporting via yield.
+        
+        Args:
+            args: Dictionary of arguments matching input_schema
+            
+        Yields:
+            Progress messages as strings
+        """
+        # Default: just execute and yield completion
+        yield "Executing..."
+        result = await self.execute(args)
+        yield "Complete" if result.success else f"Failed: {result.error}"
 
     def get_definition(self) -> ToolDefinition:
         """Get the OpenAI-compatible tool definition."""
@@ -159,19 +200,6 @@ class Tool(ABC):
             description=self.description,
             parameters=self.input_schema,
         )
-
-    async def execute_with_progress(
-        self,
-        args: dict,
-        progress_callback: Optional[Callable[[str], None]] = None,
-    ) -> ToolResult:
-        """
-        Execute with optional progress reporting.
-        
-        Override this in subclasses to support long-running operations
-        with progress updates.
-        """
-        return await self.execute(args)
 
     def check_permissions(
         self,
@@ -209,22 +237,34 @@ class AsyncTool(Tool):
     but want non-blocking execution.
     """
 
-    async def execute_async(self, args: dict) -> ToolResult:
+    async def execute_async(
+        self,
+        args: dict,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> ToolResult:
         """
         Override this for async execution instead of using thread pool.
         """
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.execute_sync, args)
+        return await loop.run_in_executor(None, lambda: self.execute_sync(args, progress_callback))
 
-    def execute_sync(self, args: dict) -> ToolResult:
+    def execute_sync(
+        self,
+        args: dict,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> ToolResult:
         """
         Synchronous execution - override in subclass.
         """
         raise NotImplementedError
 
-    async def execute(self, args: dict) -> ToolResult:
+    async def execute(
+        self,
+        args: dict,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> ToolResult:
         """Execute synchronously in thread pool."""
-        return await self.execute_async(args)
+        return await self.execute_async(args, progress_callback)
 
 
 class ProgressTool(Tool):
@@ -238,10 +278,18 @@ class ProgressTool(Tool):
     async def execute(
         self,
         args: dict,
-        progress: Optional[AsyncGenerator[str, None]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> ToolResult:
         """
         Override to handle progress streaming.
+        """
+        raise NotImplementedError
+
+    async def execute_with_progress(self, args: dict) -> AsyncGenerator[str, None]:
+        """
+        Execute with progress streaming via yield.
+        
+        Override in subclass to yield progress updates.
         """
         raise NotImplementedError
 
