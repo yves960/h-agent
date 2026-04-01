@@ -214,6 +214,7 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     from h_agent.commands.review import ReviewCommand
     from h_agent.commands.status import StatusCommand
     from h_agent.commands.theme import ThemeCommand
+    from h_agent.commands.tasks import TasksCommand
 
     registry.register(HelpCommand())
     registry.register(ClearCommand())
@@ -234,6 +235,7 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     registry.register(ReviewCommand())
     registry.register(StatusCommand())
     registry.register(ThemeCommand())
+    registry.register(TasksCommand())
 
 
 def register_command(command: Command) -> None:

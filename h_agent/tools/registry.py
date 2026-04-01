@@ -278,6 +278,11 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     from h_agent.tools.sleep import SleepTool
     from h_agent.tools.schedule import ScheduleCronTool
 
+    # Multi-agent tools
+    from h_agent.tools.task import TaskCreateTool, TaskGetTool, TaskListTool, TaskStopTool
+    from h_agent.tools.agent import AgentTool, AgentSpawnTool, AgentTalkTool
+    from h_agent.tools.team import TeamCreateTool, TeamDeleteTool, TeamListTool, SendMessageTool, ReadInboxTool, BroadcastTool
+
     registry.register(BashTool())
     registry.register(FileReadTool())
     registry.register(FileWriteTool())
@@ -298,6 +303,20 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     registry.register(AskUserQuestionTool())
     registry.register(SleepTool())
     registry.register(ScheduleCronTool())
+    # Multi-agent tools
+    registry.register(TaskCreateTool())
+    registry.register(TaskGetTool())
+    registry.register(TaskListTool())
+    registry.register(TaskStopTool())
+    registry.register(AgentTool())
+    registry.register(AgentSpawnTool())
+    registry.register(AgentTalkTool())
+    registry.register(TeamCreateTool())
+    registry.register(TeamDeleteTool())
+    registry.register(TeamListTool())
+    registry.register(SendMessageTool())
+    registry.register(ReadInboxTool())
+    registry.register(BroadcastTool())
 
 
 def register_tool(tool: Tool) -> None:

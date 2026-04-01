@@ -27,6 +27,24 @@ from h_agent.tools.ask import AskUserQuestionTool
 from h_agent.tools.sleep import SleepTool
 from h_agent.tools.schedule import ScheduleCronTool
 
+# Multi-agent tools
+from h_agent.tools.task import (
+    TaskCreateTool,
+    TaskGetTool,
+    TaskListTool,
+    TaskStopTool,
+    get_task_manager,
+)
+from h_agent.tools.agent import AgentTool, AgentSpawnTool, AgentTalkTool
+from h_agent.tools.team import (
+    TeamCreateTool,
+    TeamDeleteTool,
+    TeamListTool,
+    SendMessageTool,
+    ReadInboxTool,
+    BroadcastTool,
+)
+
 __all__ = [
     "Tool",
     "ToolResult",
@@ -50,4 +68,19 @@ __all__ = [
     "AskUserQuestionTool",
     "SleepTool",
     "ScheduleCronTool",
+    # Multi-agent tools
+    "TaskCreateTool",
+    "TaskGetTool",
+    "TaskListTool",
+    "TaskStopTool",
+    "get_task_manager",
+    "AgentTool",
+    "AgentSpawnTool",
+    "AgentTalkTool",
+    "TeamCreateTool",
+    "TeamDeleteTool",
+    "TeamListTool",
+    "SendMessageTool",
+    "ReadInboxTool",
+    "BroadcastTool",
 ]
