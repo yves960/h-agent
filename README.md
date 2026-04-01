@@ -281,6 +281,85 @@ h-agent 提供丰富的内置工具，Agent 可自动调用。
 
 ---
 
+## REPL 命令参考
+
+在交互式对话模式中，可以使用以下斜杠命令：
+
+### 核心命令
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/help [command]` | 显示帮助信息 | `/help memory` |
+| `/exit` / `/quit` | 退出 REPL | `/exit` |
+| `/clear` | 清空对话历史 | `/clear` |
+| `/history` | 显示历史记录 | `/history` |
+| `/status` | 显示会话状态 | `/status` |
+
+### 信息命令
+
+| 命令 | 说明 |
+|------|------|
+| `/tools [list]` | 列出可用工具 |
+| `/model` | 显示当前模型 |
+| `/cost` | 显示 token 使用和成本 |
+| `/usage` | 显示详细使用统计 |
+| `/config [key]` | 显示配置信息 |
+| `/sessions` | 列出保存的会话 |
+
+### 记忆命令
+
+| 命令 | 说明 |
+|------|------|
+| `/memory list` | 列出所有记忆 |
+| `/memory add <text>` | 添加新记忆 |
+| `/memory search <query>` | 搜索记忆 |
+| `/memory stats` | 显示记忆统计 |
+| `/memory clear` | 清空所有记忆 |
+
+### 开发命令
+
+| 命令 | 说明 |
+|------|------|
+| `/commit` | 创建 Git 提交 |
+| `/diff` | 显示更改差异 |
+| `/review` | 代码审查 |
+| `/tasks` | 任务管理 |
+
+### 高级命令
+
+| 命令 | 说明 |
+|------|------|
+| `/doctor` | 运行环境诊断 |
+| `/compact` | 压缩上下文 |
+| `/resume [id]` | 恢复会话 |
+| `/mcp` | MCP 服务器管理 |
+| `/skills` | 技能管理 |
+| `/theme` | 主题设置 |
+| `/vim` | Vim 模式 |
+| `/voice` | 语音模式 |
+| `/plugin` | 插件管理 |
+| `/bridge` | 桥接模式 |
+
+### 系统命令
+
+| 命令 | 说明 |
+|------|------|
+| `/upgrade` | 检查更新 |
+| `/feedback` | 发送反馈 |
+
+### 快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Ctrl+C` | 中断当前操作 |
+| `Ctrl+D` | 退出 REPL |
+| `Ctrl+L` | 清屏 |
+| `Ctrl+R` | 重试 |
+| `Tab` | 自动补全 |
+| `↑/↓` | 历史记录导航 |
+
+---
+
 ## 权限系统
 
 h-agent 提供了细粒度的权限控制系统，确保工具执行安全可控。
@@ -464,10 +543,28 @@ h-agent/
 │   ├── cli/
 │   │   ├── commands.py      # CLI 命令
 │   │   └── repl.py          # 交互式 REPL
+│   ├── commands/           # REPL 命令系统
+│   │   ├── base.py          # 命令基类
+│   │   ├── registry.py      # 命令注册表
+│   │   ├── help.py         # /help 命令
+│   │   ├── memory.py       # /memory 命令
+│   │   ├── usage.py         # /usage 命令
+│   │   ├── upgrade.py      # /upgrade 命令
+│   │   ├── feedback.py      # /feedback 命令
+│   │   └── ...              # 更多命令
+│   ├── keybindings/        # 键绑定配置
+│   │   └── config.py       # 键绑定注册表
+│   ├── screens/            # 全屏 UI 组件
+│   │   └── doctor.py       # Doctor 诊断界面
+│   ├── migrations/         # 配置迁移系统
+│   │   └── core.py        # 迁移核心
 │   └── daemon/             # 守护进程
 ├── tests/
 │   ├── test_permissions.py  # 权限系统测试
 │   ├── test_engine.py       # 引擎测试
+│   ├── test_keybindings.py  # 键绑定测试
+│   ├── test_migrations.py   # 迁移测试
+│   ├── test_screens.py      # 屏幕测试
 │   └── test_tools_*.py      # 工具测试
 ├── README.md
 ├── QUICKSTART.md

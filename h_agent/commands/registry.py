@@ -219,6 +219,11 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     from h_agent.commands.vim import VimCommand
     from h_agent.commands.voice import VoiceCommand
     from h_agent.commands.plugin import PluginCommand
+    # New commands (Phase 18)
+    from h_agent.commands.memory import MemoryCommand
+    from h_agent.commands.usage import UsageCommand
+    from h_agent.commands.upgrade import UpgradeCommand
+    from h_agent.commands.feedback import FeedbackCommand
 
     registry.register(HelpCommand())
     registry.register(ClearCommand())
@@ -244,6 +249,11 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     registry.register(VimCommand())
     registry.register(VoiceCommand())
     registry.register(PluginCommand())
+    # Register new commands (Phase 18)
+    registry.register(MemoryCommand())
+    registry.register(UsageCommand())
+    registry.register(UpgradeCommand())
+    registry.register(FeedbackCommand())
 
 
 def register_command(command: Command) -> None:
