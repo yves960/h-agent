@@ -215,6 +215,10 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     from h_agent.commands.status import StatusCommand
     from h_agent.commands.theme import ThemeCommand
     from h_agent.commands.tasks import TasksCommand
+    from h_agent.commands.bridge import BridgeCommand
+    from h_agent.commands.vim import VimCommand
+    from h_agent.commands.voice import VoiceCommand
+    from h_agent.commands.plugin import PluginCommand
 
     registry.register(HelpCommand())
     registry.register(ClearCommand())
@@ -236,6 +240,10 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     registry.register(StatusCommand())
     registry.register(ThemeCommand())
     registry.register(TasksCommand())
+    registry.register(BridgeCommand())
+    registry.register(VimCommand())
+    registry.register(VoiceCommand())
+    registry.register(PluginCommand())
 
 
 def register_command(command: Command) -> None:

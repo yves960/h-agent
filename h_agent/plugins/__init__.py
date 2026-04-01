@@ -1,206 +1,101 @@
 """
-h_agent/plugins - Plugin System
+h_agent/plugins/__init__.py - Plugin System
 
-Dynamic plugin loading for h-agent extensibility.
-Plugins are Python modules in the plugins directory or installed packages.
+Extensible plugin architecture for h-agent.
 """
 
-import os
-import sys
-import importlib
-import importlib.util
-import json
-from pathlib import Path
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field
+from .schema import Plugin, PluginManifest
+from .loader import PluginLoader
+from .registry import PluginRegistry, get_plugin_registry
 
-PLUGIN_DIR = Path(__file__).parent
-PLUGINS_CONFIG_FILE = PLUGIN_DIR.parent.parent / ".h-agent" / "plugins.json"
-PLUGIN_INDEX_URL = "https://raw.githubusercontent.com/ekko-ai/h-agent-plugins/main/index.json"
+# For backwards compatibility, also expose convenience functions
+from .registry import get_plugin_registry as _registry
 
 
-@dataclass
-class Plugin:
-    """Represents a loaded plugin."""
-    name: str
-    version: str
-    description: str
-    author: str
-    tools: List[Dict] = field(default_factory=list)
-    handlers: Dict[str, Any] = field(default_factory=dict)
-    enabled: bool = True
-    path: Optional[Path] = None
-
-    def to_dict(self) -> dict:
-        return {
-            "name": self.name,
-            "version": self.version,
-            "description": self.description,
-            "author": self.author,
-            "enabled": self.enabled,
-            "tool_count": len(self.tools),
-        }
+def load_plugin(name: str):
+    """Discover and load a single plugin by name."""
+    r = _registry()
+    if not r.plugins:
+        r.discover()
+    plugin = r.get(name)
+    if plugin and not plugin.enabled:
+        r.enable(name)
+    return plugin
 
 
-_loaded_plugins: Dict[str, Plugin] = {}
-_plugin_state: Dict[str, bool] = {}
+def _discover_plugins():
+    """Discover all plugins (lazy init)."""
+    return list(_registry().discover() or [])
 
 
-def _get_plugin_state() -> Dict[str, bool]:
-    """Load plugin enabled/disabled state from config."""
-    if PLUGINS_CONFIG_FILE.exists():
-        try:
-            with open(PLUGINS_CONFIG_FILE) as f:
-                data = json.load(f)
-            return data.get("plugins", {})
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
+def load_all_plugins():
+    """Load all discovered plugins."""
+    return {p.manifest.name: p for p in _registry().discover() or _registry().list_plugins()}
 
 
-def _save_plugin_state(state: Dict[str, bool]) -> None:
-    """Save plugin state to config."""
-    PLUGINS_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(PLUGINS_CONFIG_FILE, "w") as f:
-        json.dump({"plugins": state}, f, indent=2)
+def get_plugin(name: str):
+    """Get a plugin by name."""
+    r = _registry()
+    if not r.plugins:
+        r.discover()
+    return r.get(name)
 
 
-def _discover_plugins() -> List[Path]:
-    """Discover plugin modules in the plugins directory."""
-    plugins = []
-    if not PLUGIN_DIR.exists():
-        return plugins
-    for item in PLUGIN_DIR.iterdir():
-        if item.is_file() and item.suffix == ".py" and item.stem not in ("__init__", "__main__"):
-            plugins.append(item)
-        elif item.is_dir() and (item / "__init__.py").exists():
-            plugins.append(item)
-    return plugins
-
-
-def load_plugin(path: Path) -> Optional[Plugin]:
-    """Load a plugin from a path (file or directory)."""
-    try:
-        if path.is_file():
-            name = path.stem
-            spec = importlib.util.spec_from_file_location(name, path)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[name] = module
-                spec.loader.exec_module(module)
-        elif path.is_dir():
-            name = path.name
-            spec = importlib.util.spec_from_file_location(name, path / "__init__.py")
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[name] = module
-                spec.loader.exec_module(module)
-        else:
-            return None
-
-        module = sys.modules.get(name)
-        if not module:
-            return None
-
-        # Check for required plugin attributes
-        plugin_name = getattr(module, "PLUGIN_NAME", name)
-        plugin_version = getattr(module, "PLUGIN_VERSION", "0.0.0")
-        plugin_desc = getattr(module, "PLUGIN_DESCRIPTION", "")
-        plugin_author = getattr(module, "PLUGIN_AUTHOR", "unknown")
-
-        tools = getattr(module, "PLUGIN_TOOLS", [])
-        handlers = getattr(module, "PLUGIN_HANDLERS", {})
-
-        plugin = Plugin(
-            name=plugin_name,
-            version=plugin_version,
-            description=plugin_desc,
-            author=plugin_author,
-            tools=tools,
-            handlers=handlers,
-            path=path,
-        )
-
-        # Restore enabled state
-        state = _get_plugin_state()
-        plugin.enabled = state.get(plugin.name, True)
-
-        _loaded_plugins[plugin.name] = plugin
-        return plugin
-
-    except Exception as e:
-        print(f"[plugin] Failed to load {path}: {e}", file=sys.stderr)
-        return None
-
-
-def load_all_plugins() -> Dict[str, Plugin]:
-    """Discover and load all available plugins."""
-    state = _get_plugin_state()
-    for name, enabled in state.items():
-        if name not in _loaded_plugins and enabled:
-            # Try to load as installed package
-            try:
-                mod = importlib.import_module(f"h_agent_plugins_{name}")
-                # ... (would need proper plugin package structure)
-            except ImportError:
-                pass
-
-    # Load local plugins
-    for path in _discover_plugins():
-        name = path.stem if path.is_file() else path.name
-        if name == "__init__":
-            continue
-        if name not in _loaded_plugins:
-            load_plugin(path)
-
-    return _loaded_plugins
-
-
-def get_plugin(name: str) -> Optional[Plugin]:
-    """Get a loaded plugin by name."""
-    return _loaded_plugins.get(name)
-
-
-def list_plugins() -> List[Plugin]:
-    """List all loaded plugins."""
-    return list(_loaded_plugins.values())
+def list_plugins():
+    """List all plugins."""
+    r = _registry()
+    if not r.plugins:
+        r.discover()
+    return r.list_plugins()
 
 
 def enable_plugin(name: str) -> bool:
-    """Enable a plugin."""
-    if name in _loaded_plugins:
-        _loaded_plugins[name].enabled = True
-        state = _get_plugin_state()
-        state[name] = True
-        _save_plugin_state(state)
-        return True
-    return False
+    """Enable a plugin by name."""
+    return _registry().enable(name)
 
 
 def disable_plugin(name: str) -> bool:
-    """Disable a plugin."""
-    if name in _loaded_plugins:
-        _loaded_plugins[name].enabled = False
-        state = _get_plugin_state()
-        state[name] = True
-        _save_plugin_state(state)
-        return True
-    return False
+    """Disable a plugin by name."""
+    return _registry().disable(name)
 
 
-def get_enabled_tools() -> List[Dict]:
-    """Get all tools from enabled plugins."""
+def get_enabled_tools():
+    """Get list of tools from all enabled plugins."""
+    r = _registry()
+    if not r.plugins:
+        r.discover()
     tools = []
-    for plugin in _loaded_plugins.values():
-        if plugin.enabled:
-            tools.extend(plugin.tools)
+    for p in r.list_enabled():
+        tools.extend(p.manifest.tools or [])
     return tools
 
 
-def get_enabled_handlers() -> Dict[str, Any]:
-    """Get all handlers from enabled plugins."""
+def get_enabled_handlers():
+    """Get dict of handlers from all enabled plugins."""
+    r = _registry()
+    if not r.plugins:
+        r.discover()
     handlers = {}
-    for plugin in _loaded_plugins.values():
-        if plugin.enabled:
-            handlers.update(plugin.handlers)
+    for p in r.list_enabled():
+        if p.instance and hasattr(p.instance, "handlers"):
+            handlers.update(getattr(p.instance, "handlers", {}))
     return handlers
+
+
+__all__ = [
+    "Plugin",
+    "PluginManifest",
+    "PluginLoader",
+    "PluginRegistry",
+    "get_plugin_registry",
+    # Legacy convenience functions
+    "load_plugin",
+    "load_all_plugins",
+    "get_plugin",
+    "list_plugins",
+    "enable_plugin",
+    "disable_plugin",
+    "get_enabled_tools",
+    "get_enabled_handlers",
+    "_discover_plugins",
+]
