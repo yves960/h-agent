@@ -267,7 +267,8 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     from h_agent.tools.grep import GrepTool
     from h_agent.tools.web_fetch import WebFetchTool
     from h_agent.tools.web_search import WebSearchTool
-    from h_agent.tools.skill import SkillTool
+    # SkillTool disabled - skills module API mismatch
+    # from h_agent.tools.skill import SkillTool
     from h_agent.tools.mcp_tool import MCPTool
 
     registry.register(BashTool())
@@ -278,7 +279,7 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     registry.register(GrepTool())
     registry.register(WebFetchTool())
     registry.register(WebSearchTool())
-    registry.register(SkillTool())
+    # registry.register(SkillTool())  # Disabled - skills module API mismatch
     registry.register(MCPTool())
 
 

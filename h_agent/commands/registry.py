@@ -207,6 +207,13 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     from h_agent.commands.sessions import SessionsCommand
     from h_agent.commands.mcp import McpCommand
     from h_agent.commands.skills import SkillsCommand
+    from h_agent.commands.doctor import DoctorCommand
+    from h_agent.commands.compact import CompactCommand
+    from h_agent.commands.commit import CommitCommand
+    from h_agent.commands.diff import DiffCommand
+    from h_agent.commands.review import ReviewCommand
+    from h_agent.commands.status import StatusCommand
+    from h_agent.commands.theme import ThemeCommand
 
     registry.register(HelpCommand())
     registry.register(ClearCommand())
@@ -220,6 +227,13 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     registry.register(SessionsCommand())
     registry.register(McpCommand())
     registry.register(SkillsCommand())
+    registry.register(DoctorCommand())
+    registry.register(CompactCommand())
+    registry.register(CommitCommand())
+    registry.register(DiffCommand())
+    registry.register(ReviewCommand())
+    registry.register(StatusCommand())
+    registry.register(ThemeCommand())
 
 
 def register_command(command: Command) -> None:
