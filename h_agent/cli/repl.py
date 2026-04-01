@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
 import signal
-from typing import Optional, Callable, List
+import sys
+from typing import List, Optional
 
 # Optional: questionary for fancy prompts
 try:
@@ -20,7 +20,8 @@ try:
 except ImportError:
     HAS_QUESTIONARY = False
 
-from h_agent.tools import get_registry
+from h_agent.commands import CommandContext, get_registry
+from h_agent.tools import get_registry as get_tool_registry
 
 
 # ============================================================
@@ -52,165 +53,6 @@ class Colors:
     BRIGHT_MAGENTA = "\033[95m"
     BRIGHT_CYAN = "\033[96m"
     BRIGHT_WHITE = "\033[97m"
-
-
-# ============================================================
-# Slash Commands
-# ============================================================
-
-class SlashCommand:
-    """A slash command in the REPL."""
-    
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        handler: Callable,
-        aliases: Optional[List[str]] = None,
-    ):
-        self.name = name
-        self.description = description
-        self.handler = handler
-        self.aliases = aliases or []
-
-
-# Built-in slash commands
-SLASH_COMMANDS: List[SlashCommand] = []
-
-
-def register_slash_command(cmd: SlashCommand):
-    """Register a slash command."""
-    SLASH_COMMANDS.append(cmd)
-
-
-def get_slash_commands() -> List[SlashCommand]:
-    """Get all registered slash commands."""
-    return SLASH_COMMANDS
-
-
-def _register_builtin_commands():
-    """Register built-in slash commands."""
-    global SLASH_COMMANDS
-    
-    # /clear - Clear conversation
-    def cmd_clear(engine, context):
-        context["messages"] = []
-        return "Conversation cleared."
-    
-    SLASH_COMMANDS.append(SlashCommand(
-        name="clear",
-        description="Clear conversation history",
-        handler=cmd_clear,
-        aliases=["cls"],
-    ))
-    
-    # /help - Show help
-    def cmd_help(engine, context):
-        lines = ["Available commands:"]
-        lines.append("  /exit, /quit     Exit the REPL")
-        lines.append("  /clear           Clear conversation")
-        lines.append("  /tools           List available tools")
-        lines.append("  /model           Show current model")
-        lines.append("  /cost            Show token usage cost")
-        lines.append("  /history         Show conversation history")
-        if SLASH_COMMANDS:
-            lines.append("")
-            lines.append("Slash commands:")
-            for cmd in SLASH_COMMANDS:
-                alias_str = f" ({', '.join(cmd.aliases)})" if cmd.aliases else ""
-                lines.append(f"  /{cmd.name}{alias_str}  {cmd.description}")
-        return "\n".join(lines)
-    
-    SLASH_COMMANDS.append(SlashCommand(
-        name="help",
-        description="Show this help message",
-        handler=cmd_help,
-        aliases=["?"],
-    ))
-    
-    # /tools - List tools
-    def cmd_tools(engine, context):
-        registry = get_registry()
-        tools = registry.list_tools()
-        if not tools:
-            return "No tools available."
-        lines = ["Available tools:"]
-        for tool_name in sorted(tools):
-            tool = registry.get(tool_name)
-            if tool:
-                desc = tool.description[:60] if tool.description else ""
-                lines.append(f"  {tool_name:<20} {desc}")
-        return "\n".join(lines)
-    
-    SLASH_COMMANDS.append(SlashCommand(
-        name="tools",
-        description="List available tools",
-        handler=cmd_tools,
-    ))
-    
-    # /model - Show model
-    def cmd_model(engine, context):
-        return f"Current model: {engine.model if engine else 'unknown'}"
-    
-    SLASH_COMMANDS.append(SlashCommand(
-        name="model",
-        description="Show current model",
-        handler=cmd_model,
-    ))
-    
-    # /cost - Show cost
-    def cmd_cost(engine, context):
-        if engine:
-            usage = engine.get_usage()
-            return (
-                f"Token usage:\n"
-                f"  Prompt: {usage.prompt_tokens:,} tokens\n"
-                f"  Completion: {usage.completion_tokens:,} tokens\n"
-                f"  Total: {usage.total_tokens:,} tokens\n"
-                f"  Estimated cost: ${usage.cost_usd:.4f}"
-            )
-        return "No usage data available."
-    
-    SLASH_COMMANDS.append(SlashCommand(
-        name="cost",
-        description="Show token usage cost",
-        handler=cmd_cost,
-    ))
-    
-    # /history - Show history
-    def cmd_history(engine, context):
-        messages = context.get("messages", [])
-        if not messages:
-            return "No conversation history."
-        lines = [f"Conversation ({len(messages)} messages):"]
-        for i, msg in enumerate(messages[-10:], max(1, len(messages) - 9)):
-            role = msg.get("role", "?")
-            content = msg.get("content", "")
-            if isinstance(content, list):
-                content = "[complex content]"
-            if len(content) > 80:
-                content = content[:77] + "..."
-            lines.append(f"  [{i}] {role}: {content}")
-        return "\n".join(lines)
-    
-    SLASH_COMMANDS.append(SlashCommand(
-        name="history",
-        description="Show conversation history",
-        handler=cmd_history,
-        aliases=["hist"],
-    ))
-    
-    # /exit - Exit
-    def cmd_exit(engine, context):
-        context["running"] = False
-        return "Goodbye!"
-    
-    SLASH_COMMANDS.append(SlashCommand(
-        name="exit",
-        description="Exit the REPL",
-        handler=cmd_exit,
-        aliases=["quit", "q"],
-    ))
 
 
 # ============================================================
@@ -275,7 +117,7 @@ class REPL:
     
     Features:
     - Multi-line input support
-    - Slash command execution
+    - Command execution via /
     - Tool execution with progress
     - Conversation history management
     - Ctrl+C/Ctrl+D handling
@@ -300,13 +142,13 @@ class REPL:
         self.welcome_message = welcome_message or self._default_welcome()
         
         self.messages: List[dict] = []
-        self.context = {
-            "running": True,
-            "messages": self.messages,
-        }
+        self.context = CommandContext(
+            messages=self.messages,
+            running=True,
+            engine=engine,
+        )
         
         self._setup_signal_handlers()
-        _register_builtin_commands()
 
     def _default_system_prompt(self) -> str:
         """Get default system prompt."""
@@ -359,9 +201,9 @@ class REPL:
         
         return "message", raw
 
-    def _execute_slash_command(self, cmd_str: str) -> Optional[str]:
+    async def _execute_slash_command(self, cmd_str: str) -> Optional[str]:
         """
-        Execute a slash command.
+        Execute a slash command via the command registry.
         
         Returns:
             Output string or None to continue
@@ -370,28 +212,27 @@ class REPL:
         cmd_name = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
         
-        # Find command
-        cmd = None
-        for c in SLASH_COMMANDS:
-            if c.name == cmd_name or cmd_name in c.aliases:
-                cmd = c
-                break
+        registry = get_registry()
         
-        if not cmd:
+        # Check if command exists
+        if not registry.has(cmd_name):
             # Try partial match
-            matches = [c for c in SLASH_COMMANDS if c.name.startswith(cmd_name)]
+            matches = registry.find_partial(cmd_name)
             if len(matches) == 1:
                 cmd = matches[0]
             elif len(matches) > 1:
-                return f"Ambiguous command: {cmd_name}. Matches: {', '.join(m.name for m in matches)}"
+                names = ", ".join(f"/{c.name}" for c in matches)
+                return f"Ambiguous command: /{cmd_name}. Matches: {names}"
             else:
                 return f"Unknown command: /{cmd_name}. Type /help for available commands."
         
-        # Execute
-        try:
-            return cmd.handler(self.engine, self.context)
-        except Exception as e:
-            return f"Error executing command: {e}"
+        # Execute via registry
+        result = await registry.execute(cmd_name, args, self.context)
+        
+        if not result.success and result.error:
+            return f"{Colors.RED}Error: {result.error}{Colors.RESET}"
+        
+        return result.output if result.output else None
 
     async def _run_query(self, prompt: str):
         """Run a query through the engine."""
@@ -436,7 +277,7 @@ class REPL:
         if initial_prompt:
             cmd_type, content = self._parse_input(initial_prompt)
             if cmd_type == "slash":
-                output = self._execute_slash_command(content)
+                output = asyncio.run(self._execute_slash_command(content))
                 if output:
                     print(output)
             else:
@@ -444,7 +285,7 @@ class REPL:
             return
         
         # Main loop
-        while self.context.get("running", True):
+        while self.context.running:
             try:
                 raw = get_input()
                 if not raw:
@@ -455,7 +296,7 @@ class REPL:
                 if cmd_type == "empty":
                     continue
                 elif cmd_type == "slash":
-                    output = self._execute_slash_command(content)
+                    output = asyncio.run(self._execute_slash_command(content))
                     if output:
                         print(output)
                 else:
@@ -504,9 +345,9 @@ async def run_repl_async(
 ):
     """Run REPL asynchronously."""
     from h_agent.core.engine import QueryEngine
-    from h_agent.tools import get_registry
+    from h_agent.tools import get_registry as get_tool_registry
     
-    registry = get_registry()
+    registry = get_tool_registry()
     tool_schemas = registry.get_tool_schemas()
     
     engine = QueryEngine(

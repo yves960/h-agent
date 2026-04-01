@@ -24,7 +24,7 @@ DANGEROUS_PATTERNS = [
     r"mkfs",
     r"dd\s+if=",
     r">\s*/dev/sd",
-    r":\(\)\{\s*:\|\:\&\;:\}",  # Fork bomb
+    r":\(\)\{.*:\|:&.*\};:",  # Fork bomb
     r"curl.*\|.*sh",  # Pipe to shell (common install pattern - risky)
 ]
 
