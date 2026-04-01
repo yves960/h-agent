@@ -267,6 +267,8 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     from h_agent.tools.grep import GrepTool
     from h_agent.tools.web_fetch import WebFetchTool
     from h_agent.tools.web_search import WebSearchTool
+    from h_agent.tools.skill import SkillTool
+    from h_agent.tools.mcp_tool import MCPTool
 
     registry.register(BashTool())
     registry.register(FileReadTool())
@@ -276,6 +278,8 @@ def _register_builtin_tools(registry: ToolRegistry) -> None:
     registry.register(GrepTool())
     registry.register(WebFetchTool())
     registry.register(WebSearchTool())
+    registry.register(SkillTool())
+    registry.register(MCPTool())
 
 
 def register_tool(tool: Tool) -> None:

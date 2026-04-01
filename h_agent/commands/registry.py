@@ -205,6 +205,8 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     from h_agent.commands.history import HistoryCommand
     from h_agent.commands.resume import ResumeCommand
     from h_agent.commands.sessions import SessionsCommand
+    from h_agent.commands.mcp import McpCommand
+    from h_agent.commands.skills import SkillsCommand
 
     registry.register(HelpCommand())
     registry.register(ClearCommand())
@@ -216,6 +218,8 @@ def _register_builtin_commands(registry: CommandRegistry) -> None:
     registry.register(HistoryCommand())
     registry.register(ResumeCommand())
     registry.register(SessionsCommand())
+    registry.register(McpCommand())
+    registry.register(SkillsCommand())
 
 
 def register_command(command: Command) -> None:
