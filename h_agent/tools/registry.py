@@ -79,16 +79,19 @@ class ToolRegistry:
         # Create a simple tool wrapper if schema provided
         if schema:
             class HandlerTool(Tool):
-                name = name
-                description = schema.get("description", "")
+                def __init__(self, tool_name: str, tool_description: str, tool_schema: dict, tool_handler: Callable):
+                    self.name = tool_name
+                    self.description = tool_description
+                    self._schema = tool_schema
+                    self._handler = tool_handler
                 
                 @property
                 def input_schema(self) -> dict:
-                    return schema.get("parameters", schema)
+                    return self._schema.get("parameters", self._schema)
                 
                 async def execute(self, args: dict) -> ToolResult:
                     try:
-                        result = handler(args)
+                        result = self._handler(args)
                         if asyncio.iscoroutine(result):
                             result = await result
                         if isinstance(result, ToolResult):
@@ -97,7 +100,8 @@ class ToolRegistry:
                     except Exception as e:
                         return ToolResult.err(str(e))
             
-            self._tools[name] = HandlerTool()
+            tool_instance = HandlerTool(name, schema.get("description", ""), schema, handler)
+            self._tools[name] = tool_instance
 
     def unregister(self, name: str) -> bool:
         """
