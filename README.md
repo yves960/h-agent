@@ -275,6 +275,131 @@ h-agent 提供丰富的内置工具，Agent 可自动调用。
 
 ---
 
+## 权限系统
+
+h-agent 提供了细粒度的权限控制系统，确保工具执行安全可控。
+
+### PermissionMode
+
+```python
+from h_agent.permissions import PermissionContext, PermissionMode, PermissionChecker
+
+# 创建权限上下文
+ctx = PermissionContext(mode=PermissionMode.AUTO)
+
+# 添加白名单规则
+ctx.add_always_allow("bash", "ls", "pwd", "git status")
+ctx.add_always_allow("read", "*.py", "*.txt", "*.md")
+
+# 添加黑名单规则
+ctx.add_always_deny("bash", "rm -rf*", "dd", "mkfs")
+ctx.add_always_deny("bash", "DROP DATABASE*")
+
+# 限制工作目录
+ctx.working_dirs = ["/home/user/project", "~/code"]
+
+# 执行权限检查
+checker = PermissionChecker(ctx)
+result = checker.check("bash", {"command": "ls -la"})
+print(result.decision)  # allow/deny/ask
+print(result.risk_level)  # low/medium/high/critical
+```
+
+### 权限模式
+
+| 模式 | 说明 |
+|------|------|
+| `DEFAULT` | 每次询问用户确认 |
+| `AUTO` | 自动允许安全操作，询问危险操作 |
+| `BYPASS` | 允许所有操作（危险！） |
+| `DENY` | 拒绝所有工具执行 |
+
+### 危险操作检测
+
+系统自动检测以下危险操作：
+- `rm -rf /` - 递归删除
+- `DROP DATABASE` - 数据库删除
+- `dd` - 直接磁盘写入
+- `mkfs` - 文件系统创建
+- `sudo su` - 权限提升
+
+### 集成到 QueryEngine
+
+```python
+from h_agent.core.engine import QueryEngine
+from h_agent.permissions import PermissionContext, PermissionMode
+
+ctx = PermissionContext(mode=PermissionMode.AUTO)
+
+engine = QueryEngine(
+    model="gpt-4o",
+    tools=tool_schemas,
+    permission_context=ctx,
+)
+```
+
+### 工具权限检查
+
+```python
+from h_agent.tools.base import Tool
+
+class MyTool(Tool):
+    name = "my_tool"
+    description = "My custom tool"
+    
+    async def execute(self, args):
+        # 执行前检查权限
+        result = self.check_permissions(args, permission_context)
+        if result.is_denied:
+            return ToolResult.err("Permission denied")
+        # ... 继续执行
+```
+
+---
+
+## Thinking 模式支持
+
+h-agent 支持推理模型的思考过程显示，如 DeepSeek Reasoner。
+
+### 支持的模型
+
+- `deepseek-reasoner` - DeepSeek 推理模型
+- 其他输出 `reasoning_content` 的模型
+
+### REPL 显示
+
+思考内容在 REPL 中以灰色显示：
+
+```
+[User]
+解释快速排序算法
+
+[AI Thinking (gray text)...]
+这是关于快速排序的解释...
+
+[Final Response]
+快速排序是一种分治排序算法...
+```
+
+### 事件处理
+
+```python
+from h_agent.core.engine import QueryEngine, StreamEventType
+
+def handle_event(event):
+    if event.type == StreamEventType.THINKING:
+        print(f"\033[90m{event.content}\033[0m", end="")  # 灰色
+    elif event.type == StreamEventType.CONTENT:
+        print(event.content, end="")
+
+result = await engine.run_tool_loop(
+    messages=messages,
+    event_callback=handle_event,
+)
+```
+
+---
+
 ## 配置
 
 ### 配置优先级
@@ -311,12 +436,19 @@ h-agent/
 │   ├── core/
 │   │   ├── agent_loop.py    # 核心智能体循环
 │   │   ├── config.py        # 配置管理
+│   │   ├── engine.py        # 查询引擎（流式、工具调用）
 │   │   └── tools.py         # 工具定义
 │   ├── tools/               # 扩展工具模块
+│   │   ├── base.py          # 工具基类
+│   │   ├── registry.py      # 工具注册表
 │   │   ├── git.py           # Git 操作
 │   │   ├── file_ops.py      # 文件操作
 │   │   ├── shell.py         # Shell 命令
 │   │   └── docker.py        # Docker 操作
+│   ├── permissions/         # 权限系统
+│   │   ├── context.py       # 权限上下文、模式、规则
+│   │   ├── checker.py       # 权限检查器
+│   │   └── rules.py         # 规则匹配、危险操作检测
 │   ├── features/
 │   │   ├── sessions.py      # 会话持久化
 │   │   ├── channels.py      # 多渠道支持
@@ -325,9 +457,12 @@ h-agent/
 │   │   └── skills.py        # 动态技能
 │   ├── cli/
 │   │   ├── commands.py      # CLI 命令
-│   │   └── init_wizard.py  # 设置向导
+│   │   └── repl.py          # 交互式 REPL
 │   └── daemon/             # 守护进程
 ├── tests/
+│   ├── test_permissions.py  # 权限系统测试
+│   ├── test_engine.py       # 引擎测试
+│   └── test_tools_*.py      # 工具测试
 ├── README.md
 ├── QUICKSTART.md
 └── pyproject.toml
