@@ -301,6 +301,123 @@ h-agent provides rich built-in tools that agents can call automatically.
 
 ---
 
+## New Features (v2.0 Refactoring)
+
+### Multi-Agent Team Collaboration
+
+h-agent supports multi-agent team collaboration with different roles:
+
+```yaml
+# ~/.h-agent/team.yaml
+agents:
+  - id: "pm"
+    name: "Product Manager"
+    model: "gpt-4o"
+    role: "Requirement Analysis"
+
+  - id: "dev"
+    name: "Developer"
+    model: "gpt-4o"
+    role: "Code Implementation"
+
+  - id: "qa"
+    name: "QA Engineer"
+    model: "gpt-4o-mini"
+    role: "Test Validation"
+```
+
+Usage:
+```bash
+h-agent team start    # Start team mode
+h-agent team status   # View team status
+h-agent team assign   # Assign tasks
+```
+
+### MCP Tool Integration
+
+Support for Model Context Protocol (MCP):
+
+```bash
+/mcp add playwright   # Add Playwright MCP
+/mcp list             # List added MCPs
+/mcp status           # View MCP status
+```
+
+### IDE Bridge
+
+HTTP server bridge for IDE integration:
+
+```bash
+/bridge start         # Start bridge service
+/bridge status        # View status
+```
+
+### Buddy Companion System
+
+Generate unique virtual companions for each user:
+
+```bash
+/buddy roll           # Generate new companion
+/buddy show           # Show current companion
+/buddy name           # Name companion
+```
+
+Companions have rarity, species, personality attributes.
+
+### Vim Mode
+
+Vim-style keybindings and editing:
+
+```bash
+/vim enable           # Enable Vim mode
+/vim disable          # Disable Vim mode
+/vim status           # View status
+```
+
+### Voice Mode
+
+Voice input support:
+
+```bash
+/voice start          # Start recording
+/voice stop           # Stop and transcribe
+/voice status         # View status
+```
+
+### Task Scheduling
+
+Cron tasks and heartbeat:
+
+```bash
+/cron add "*/5 * * * *" "echo 'hello'" "Test Task"
+/cron list            # List tasks
+/cron enable <id>     # Enable task
+/cron disable <id>    # Disable task
+
+/heartbeat start      # Start heartbeat
+/heartbeat stop       # Stop heartbeat
+/heartbeat status     # View status
+```
+
+### Plugin System
+
+Extensible plugin architecture:
+
+```bash
+/plugin list          # List plugins
+/plugin enable <name> # Enable plugin
+/plugin disable <name> # Disable plugin
+```
+
+### Resilience & Fault Tolerance
+
+Automatic failure recovery:
+- Auto retry on API failure
+- Auth profile auto-switch
+- Cooldown to prevent frequent switching
+
+---
+
 ## Project Structure
 
 ```
@@ -308,29 +425,181 @@ h-agent/
 ├── h_agent/
 │   ├── __init__.py
 │   ├── __main__.py
-│   ├── core/
-│   │   ├── agent_loop.py    # Core agent loop
-│   │   ├── config.py        # Configuration management
-│   │   └── tools.py         # Tool definitions
-│   ├── tools/               # Extended tool modules
-│   │   ├── git.py           # Git operations
-│   │   ├── file_ops.py      # File operations
-│   │   ├── shell.py         # Shell commands
-│   │   └── docker.py        # Docker operations
-│   ├── features/
-│   │   ├── sessions.py      # Session persistence
-│   │   ├── channels.py      # Multi-channel support
-│   │   ├── rag.py           # Code RAG
-│   │   ├── subagents.py     # Sub-agents
-│   │   └── skills.py        # Dynamic skills
-│   ├── cli/
-│   │   ├── commands.py      # CLI commands
-│   │   └── init_wizard.py  # Setup wizard
-│   └── daemon/             # Daemon
-├── tests/
-├── README.md
-├── QUICKSTART.md
-└── pyproject.toml
+│   │
+│   ├── core/                    # Core engine
+│   │   ├── agent_loop.py        # Agent loop
+│   │   ├── config.py            # Configuration
+│   │   ├── engine.py            # Query engine
+│   │   └── tools.py             # Tool definitions
+│   │
+│   ├── tools/                   # Tool modules (30+ tools)
+│   │   ├── base.py              # Tool base class
+│   │   ├── registry.py          # Tool registry
+│   │   ├── git.py               # Git operations
+│   │   ├── file_ops.py          # File operations
+│   │   ├── shell.py             # Shell commands
+│   │   ├── docker.py            # Docker operations
+│   │   └── ...                  # More tools
+│   │
+│   ├── permissions/             # Permission system
+│   │   ├── context.py           # Permission context
+│   │   ├── checker.py           # Permission checker
+│   │   └and rules.py            # Rule matching
+│   │
+│   ├── features/                # Feature modules
+│   │   ├── sessions.py          # Session persistence
+│   │   ├── channels.py          # Multi-channel
+│   │   ├── rag.py               # Code RAG
+│   │   ├── subagents.py         # Sub-agents
+│   │   ├── skills.py            # Dynamic skills
+│   │   └and tasks.py            # Task system
+│   │
+│   ├── session/                 # Session management
+│   │   ├── transcript.py        # Session transcript
+│   │   ├── storage.py           # Session storage
+│   │   └and resume.py           # Session resume
+│   │
+│   ├── team/                    # Multi-agent team
+│   │   ├── agent.py             # Agent definition
+│   │   ├── team.py              # Team management
+│   │   ├── async_team.py        # Async team
+│   │   └and protocol.py         # Team protocol
+│   │
+│   ├── coordinator/             # Multi-agent coordinator
+│   │   ├── messaging.py         # Message bus
+│   │   ├── orchestrator.py      # Task orchestration
+│   │   └and pool.py             # Agent pool
+│   │
+│   ├── mcp/                     # MCP tool integration
+│   │   ├── protocol.py          # MCP protocol
+│   │   ├── client.py            # MCP client
+│   │   └and transport.py        # Transport layer
+│   │
+│   ├── bridge/                  # IDE bridge system
+│   │   ├── server.py            # HTTP server
+│   │   ├── protocol.py          # Message protocol
+│   │   └and handlers.py         # Request handlers
+│   │
+│   ├── buddy/                   # Buddy companion system
+│   │   ├── types.py             # Type definitions
+│   │   ├── companion.py         # Companion generation
+│   │   ├── sprites.py           # Sprite rendering
+│   │   └and display.py          # Display formatting
+│   │
+│   ├── plugins/                 # Plugin system
+│   │   ├── schema.py            # Plugin schema
+│   │   ├── loader.py            # Plugin loader
+│   │   └and registry.py         # Plugin registry
+│   │
+│   ├── scheduler/               # Task scheduling
+│   │   ├── cron.py              # Cron tasks
+│   │   ├── heartbeat.py         # Heartbeat monitor
+│   │   └and store.py            # Task storage
+│   │
+│   ├── concurrency/             # Concurrency control
+│   │   ├── lanes.py             # Lane queues
+│   │   ├── heartbeat.py         # Heartbeat runner
+│   │   └and cron.py             # Cron service
+│   │
+│   ├── resilience/              # Resilience/fault tolerance
+│   │   ├── classify.py          # Failure classification
+│   │   ├── profiles.py          # Auth profiles
+│   │   └and runner.py           # Resilience runner
+│   │
+│   ├── delivery/                # Delivery system
+│   │   ├── queue.py             # Delivery queue
+│   │   └and runner.py           # Delivery runner
+│   │
+│   ├── vim/                     # Vim mode
+│   │   ├── mode.py              # Vim state machine
+│   │   ├── keybindings.py       # Vim keybindings
+│   │   └and motions.py          # Vim motions
+│   │
+│   ├── voice/                   # Voice mode
+│   │   ├── recorder.py          # Audio recorder
+│   │   └and stt.py               # Speech-to-text
+│   │
+│   ├── services/                # Service layer
+│   │   └and compact.py           # Message compacting
+│   │
+│   ├── memory/                  # Memory system
+│   │   └and ...
+│   │
+│   ├── personality/             # Personality system
+│   │   └and ...
+│   │
+│   ├── planner/                 # Planner
+│   │   └and ...
+│   │
+│   ├── web/                     # Web automation
+│   │   └and ...
+│   │
+│   ├── cli/                     # CLI entry point
+│   │   ├── commands.py          # CLI commands
+│   │   └and repl.py              # Interactive REPL
+│   │
+│   ├── commands/                # REPL commands (30+)
+│   │   ├── base.py              # Command base
+│   │   ├── registry.py          # Command registry
+│   │   ├── help.py              # /help
+│   │   ├── memory.py            # /memory
+│   │   ├── usage.py             # /usage
+│   │   ├── upgrade.py           # /upgrade
+│   │   ├── feedback.py          # /feedback
+│   │   ├── bridge.py            # /bridge
+│   │   ├── buddy.py             # /buddy
+│   │   ├── voice.py             # /voice
+│   │   ├── vim.py               # /vim
+│   │   ├── mcp.py               # /mcp
+│   │   ├── plugin.py            # /plugin
+│   │   ├── cron.py              # /cron
+│   │   └and ...                  # More commands
+│   │
+│   ├── keybindings/             # Keybinding config
+│   │   └and config.py            # Keybinding registry
+│   │
+│   ├── screens/                 # Full-screen UI
+│   │   └and doctor.py           # Doctor diagnostic
+│   │
+│   ├── migrations/              # Config migration
+│   │   └and core.py              # Migration core
+│   │
+│   ├── daemon/                  # Daemon
+│   │   └and ...
+│   │
+│   ├── adapters/                # Adapters
+│   │   └and ...
+│   │
+│   ├── codebase/                # Codebase indexing
+│   │   └and ...
+│   │
+│   └and skills/                  # Skills module
+│       └and ...
+│
+├── tests/                       # Test suite
+│   ├── test_permissions.py
+│   ├── test_engine.py
+│   ├── test_team.py
+│   ├── test_coordinator.py
+│   ├── test_scheduler.py
+│   ├── test_concurrency.py
+│   ├── test_resilience.py
+│   └and ...                      # More tests
+│
+├── docs/                        # Documentation
+│   └ guides/                    # Detailed guides
+│
+├── skills/                      # Skill definitions
+│
+├── README.md                    # Chinese docs
+├── README-en.md                 # English docs
+├── USER_GUIDE.md                # Chinese user guide
+├── USER_GUIDE-en.md             # English user guide
+├── QUICKSTART.md                # Chinese quick start
+├── QUICKSTART-en.md             # English quick start
+├── CHANGELOG.md                 # Chinese changelog
+├── CHANGELOG-en.md              # English changelog
+└and pyproject.toml               # Project config
 ```
 
 ---

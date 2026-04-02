@@ -360,6 +360,125 @@ h-agent 提供丰富的内置工具，Agent 可自动调用。
 
 ---
 
+## 新特性（v2.0重构）
+
+### 多Agent团队协作
+
+h-agent 支持多Agent团队协作，可以配置不同角色的Agent共同完成任务：
+
+```yaml
+# ~/.h-agent/team.yaml
+agents:
+  - id: "pm"
+    name: "产品经理"
+    model: "gpt-4o"
+    role: "需求分析"
+
+  - id: "dev"
+    name: "开发工程师"
+    model: "gpt-4o"
+    role: "代码实现"
+
+  - id: "qa"
+    name: "测试工程师"
+    model: "gpt-4o-mini"
+    role: "测试验证"
+```
+
+使用：
+```bash
+h-agent team start    # 启动团队模式
+h-agent team status   # 查看团队状态
+h-agent team assign   # 分配任务
+```
+
+### MCP工具集成
+
+支持 Model Context Protocol (MCP)，可以接入外部工具：
+
+```bash
+/mcp add playwright   # 添加Playwright MCP
+/mcp list             # 列出已添加的MCP
+/mcp status           # 查看MCP状态
+```
+
+### IDE桥接
+
+通过HTTP服务器桥接IDE：
+
+```bash
+/bridge start         # 启动桥接服务
+/bridge status        # 查看状态
+```
+
+IDE可以通过HTTP API与h-agent交互。
+
+### Buddy伴侣系统
+
+为每个用户生成独特的虚拟伴侣：
+
+```bash
+/buddy roll           # 生成新伴侣
+/buddy show           # 显示当前伴侣
+/buddy name           # 命名伴侣
+```
+
+伴侣有稀有度、种类、个性等属性，增添趣味性。
+
+### Vim模式
+
+支持Vim风格的键绑定和编辑模式：
+
+```bash
+/vim enable           # 启用Vim模式
+/vim disable          # 禁用Vim模式
+/vim status           # 查看状态
+```
+
+### 语音模式
+
+支持语音输入：
+
+```bash
+/voice start          # 开始录音
+/voice stop           # 停止并转文本
+/voice status         # 查看状态
+```
+
+### 任务调度
+
+支持Cron任务和Heartbeat：
+
+```bash
+/cron add "*/5 * * * *" "echo 'hello'" "测试任务"
+/cron list            # 列出任务
+/cron enable <id>     # 启用任务
+/cron disable <id>    # 禁用任务
+
+/heartbeat start      # 启动心跳
+/heartbeat stop       # 停止心跳
+/heartbeat status     # 查看状态
+```
+
+### 插件系统
+
+可扩展的插件架构：
+
+```bash
+/plugin list          # 列出插件
+/plugin enable <name> # 启用插件
+/plugin disable <name> # 禁用插件
+```
+
+### 弹性容错
+
+自动故障恢复和冷却机制：
+- API失败自动重试
+- 认证Profile自动切换
+- 冷却时间防止频繁切换
+
+---
+
 ## 权限系统
 
 h-agent 提供了细粒度的权限控制系统，确保工具执行安全可控。
@@ -518,57 +637,187 @@ h-agent/
 ├── h_agent/
 │   ├── __init__.py
 │   ├── __main__.py
-│   ├── core/
-│   │   ├── agent_loop.py    # 核心智能体循环
-│   │   ├── config.py        # 配置管理
-│   │   ├── engine.py        # 查询引擎（流式、工具调用）
-│   │   └── tools.py         # 工具定义
-│   ├── tools/               # 扩展工具模块
-│   │   ├── base.py          # 工具基类
-│   │   ├── registry.py      # 工具注册表
-│   │   ├── git.py           # Git 操作
-│   │   ├── file_ops.py      # 文件操作
-│   │   ├── shell.py         # Shell 命令
-│   │   └── docker.py        # Docker 操作
-│   ├── permissions/         # 权限系统
-│   │   ├── context.py       # 权限上下文、模式、规则
-│   │   ├── checker.py       # 权限检查器
-│   │   └── rules.py         # 规则匹配、危险操作检测
-│   ├── features/
-│   │   ├── sessions.py      # 会话持久化
-│   │   ├── channels.py      # 多渠道支持
-│   │   ├── rag.py           # 代码 RAG
-│   │   ├── subagents.py     # 子智能体
-│   │   └── skills.py        # 动态技能
-│   ├── cli/
-│   │   ├── commands.py      # CLI 命令
-│   │   └── repl.py          # 交互式 REPL
-│   ├── commands/           # REPL 命令系统
-│   │   ├── base.py          # 命令基类
-│   │   ├── registry.py      # 命令注册表
-│   │   ├── help.py         # /help 命令
-│   │   ├── memory.py       # /memory 命令
-│   │   ├── usage.py         # /usage 命令
-│   │   ├── upgrade.py      # /upgrade 命令
-│   │   ├── feedback.py      # /feedback 命令
-│   │   └── ...              # 更多命令
-│   ├── keybindings/        # 键绑定配置
-│   │   └── config.py       # 键绑定注册表
-│   ├── screens/            # 全屏 UI 组件
-│   │   └── doctor.py       # Doctor 诊断界面
-│   ├── migrations/         # 配置迁移系统
-│   │   └── core.py        # 迁移核心
-│   └── daemon/             # 守护进程
-├── tests/
-│   ├── test_permissions.py  # 权限系统测试
-│   ├── test_engine.py       # 引擎测试
-│   ├── test_keybindings.py  # 键绑定测试
-│   ├── test_migrations.py   # 迁移测试
-│   ├── test_screens.py      # 屏幕测试
-│   └── test_tools_*.py      # 工具测试
-├── README.md
-├── QUICKSTART.md
-└── pyproject.toml
+│   │
+│   ├── core/                    # 核心引擎
+│   │   ├── agent_loop.py        # Agent循环
+│   │   ├── config.py            # 配置管理
+│   │   ├── engine.py            # 查询引擎（流式、工具调用）
+│   │   └── tools.py             # 工具定义
+│   │
+│   ├── tools/                   # 工具模块（30+工具）
+│   │   ├── base.py              # 工具基类
+│   │   ├── registry.py          # 工具注册表
+│   │   ├── git.py               # Git操作
+│   │   ├── file_ops.py          # 文件操作
+│   │   ├── shell.py             # Shell命令
+│   │   ├── docker.py            # Docker操作
+│   │   └── ...                  # 更多工具
+│   │
+│   ├── permissions/             # 权限系统
+│   │   ├── context.py           # 权限上下文、模式、规则
+│   │   ├── checker.py           # 权限检查器
+│   │   └── rules.py             # 规则匹配、危险操作检测
+│   │
+│   ├── features/                # 特性模块
+│   │   ├── sessions.py          # 会话持久化
+│   │   ├── channels.py          # 多渠道支持
+│   │   ├── rag.py               # 代码RAG
+│   │   ├── subagents.py         # 子智能体
+│   │   ├── skills.py            # 动态技能
+│   │   └── tasks.py             # 任务系统
+│   │
+│   ├── session/                 # 会话管理（独立模块）
+│   │   ├── transcript.py        # 会话记录
+│   │   ├── storage.py           # 会话存储
+│   │   └── resume.py            # 会话恢复
+│   │
+│   ├── team/                    # 多Agent团队
+│   │   ├── agent.py             # Agent定义
+│   │   ├── team.py              # 团队管理
+│   │   ├── async_team.py        # 异步团队
+│   │   └── protocol.py          # 团队协议
+│   │
+│   ├── coordinator/             # 多Agent协调器
+│   │   ├── messaging.py         # 消息总线
+│   │   ├── orchestrator.py      # 任务编排
+│   │   └── pool.py              # Agent池
+│   │
+│   ├── mcp/                     # MCP工具集成
+│   │   ├── protocol.py          # MCP协议
+│   │   ├── client.py            # MCP客户端
+│   │   └── transport.py         # 传输层
+│   │
+│   ├── bridge/                  # IDE桥接系统
+│   │   ├── server.py            # HTTP服务器
+│   │   ├── protocol.py          # 消息协议
+│   │   └── handlers.py          # 请求处理
+│   │
+│   ├── buddy/                   # Buddy伴侣系统
+│   │   ├── types.py             # 类型定义
+│   │   ├── companion.py         # 伴侣生成
+│   │   ├── sprites.py           # 精灵渲染
+│   │   └── display.py           # 显示格式
+│   │
+│   ├── plugins/                 # 插件系统
+│   │   ├── schema.py            # 插件规范
+│   │   ├── loader.py            # 插件加载器
+│   │   └── registry.py          # 插件注册表
+│   │
+│   ├── scheduler/               # 任务调度
+│   │   ├── cron.py              # Cron任务
+│   │   ├── heartbeat.py         # Heartbeat监控
+│   │   └── store.py             # 任务存储
+│   │
+│   ├── concurrency/             # 并发控制
+│   │   ├── lanes.py             # Lane队列
+│   │   ├── heartbeat.py         # Heartbeat运行器
+│   │   └── cron.py              # Cron服务
+│   │
+│   ├── resilience/              # 弹性/容错
+│   │   ├── classify.py          # 故障分类
+│   │   ├── profiles.py          # 认证Profile
+│   │   └── runner.py            # 弹性运行器
+│   │
+│   ├── delivery/                # 交付系统
+│   │   ├── queue.py             # 交付队列
+│   │   └── runner.py            # 交付运行器
+│   │
+│   ├── vim/                     # Vim模式
+│   │   ├── mode.py              # Vim状态机
+│   │   ├── keybindings.py       # Vim键绑定
+│   │   └── motions.py           # Vim移动
+│   │
+│   ├── voice/                   # 语音模式
+│   │   ├── recorder.py          # 音频录制
+│   │   └── stt.py               # 语音转文本
+│   │
+│   ├── services/                # 服务层
+│   │   └── compact.py           # 消息压缩
+│   │
+│   ├── memory/                  # 记忆系统
+│   │   └── ...
+│   │
+│   ├── personality/             # 人格系统
+│   │   └── ...
+│   │
+│   ├── planner/                 # 规划器
+│   │   └── ...
+│   │
+│   ├── web/                     # Web自动化
+│   │   └── ...
+│   │
+│   ├── cli/                     # CLI入口
+│   │   ├── commands.py          # CLI命令
+│   │   └── repl.py              # 交互式REPL
+│   │
+│   ├── commands/                # REPL命令系统（30+命令）
+│   │   ├── base.py              # 命令基类
+│   │   ├── registry.py          # 命令注册表
+│   │   ├── help.py              # /help
+│   │   ├── memory.py            # /memory
+│   │   ├── usage.py             # /usage
+│   │   ├── upgrade.py           # /upgrade
+│   │   ├── feedback.py          # /feedback
+│   │   ├── bridge.py            # /bridge
+│   │   ├── buddy.py             # /buddy
+│   │   ├── voice.py             # /voice
+│   │   ├── vim.py               # /vim
+│   │   ├── mcp.py               # /mcp
+│   │   ├── plugin.py            # /plugin
+│   │   ├── cron.py              # /cron
+│   │   └── ...                  # 更多命令
+│   │
+│   ├── keybindings/             # 键绑定配置
+│   │   └── config.py            # 键绑定注册表
+│   │
+│   ├── screens/                 # 全屏UI组件
+│   │   └── doctor.py            # Doctor诊断界面
+│   │
+│   ├── migrations/              # 配置迁移系统
+│   │   └── core.py              # 迁移核心
+│   │
+│   ├── daemon/                  # 守护进程
+│   │   └── ...
+│   │
+│   ├── adapters/                # 适配器
+│   │   └── ...
+│   │
+│   ├── codebase/                # 代码库索引
+│   │   └── ...
+│   │
+│   └── skills/                  # 技能模块
+│       └── ...
+│
+├── tests/                       # 测试套件
+│   ├── test_permissions.py      # 权限系统测试
+│   ├── test_engine.py           # 引擎测试
+│   ├── test_keybindings.py      # 键绑定测试
+│   ├── test_migrations.py       # 迁移测试
+│   ├── test_screens.py          # 屏幕测试
+│   ├── test_tools_*.py          # 工具测试
+│   ├── test_team.py             # 团队测试
+│   ├── test_coordinator.py      # 协调器测试
+│   ├── test_scheduler.py        # 调度器测试
+│   ├── test_concurrency.py      # 并发测试
+│   ├── test_resilience.py       # 弹性测试
+│   └── ...                      # 更多测试
+│
+├── docs/                        # 文档
+│   └ guides/                    # 详细指南
+│
+├── skills/                      # 技能定义
+│
+├── README.md                    # 中文文档
+├── README-en.md                 # 英文文档
+├── USER_GUIDE.md                # 中文用户指南
+├── USER_GUIDE-en.md             # 英文用户指南
+├── QUICKSTART.md                # 中文快速开始
+├── QUICKSTART-en.md             # 英文快速开始
+├── CHANGELOG.md                 # 中文变更日志
+├── CHANGELOG-en.md              # 英文变更日志
+├── TEST_REPORT_PHASE1.md        # 阶段1测试报告
+├── TEST_REPORT_PHASE7_8.md      # 阶段7-8测试报告
+└── pyproject.toml               # 项目配置
 ```
 
 ---

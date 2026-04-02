@@ -41,6 +41,13 @@
   - [Detailed Steps](#detailed-steps-5)
   - [Examples](#examples-5)
   - [Further Reading](#further-reading-5)
+- [Chapter 7: Buddy Companion System](#chapter-7-buddy-companion-system)
+- [Chapter 8: Vim Mode](#chapter-8-vim-mode)
+- [Chapter 9: Voice Mode](#chapter-9-voice-mode)
+- [Chapter 10: IDE Bridge](#chapter-10-ide-bridge)
+- [Chapter 11: Task Scheduling](#chapter-11-task-scheduling)
+- [Chapter 12: Plugin System](#chapter-12-plugin-system)
+- [Appendix: Command Reference](#appendix-command-reference)
 
 ---
 
@@ -789,3 +796,503 @@ Cache hit rate: 78%
 - [Performance Optimization Guide](performance/optimization.md)
 - [Offline Deployment Best Practices](deployment/offline.md)
 - [Plugin Development Documentation](plugins/development.md)
+
+---
+
+## Chapter 7: Buddy Companion System
+
+### Scenario
+You want a fun virtual companion to add some entertainment to daily use.
+
+### Quick Start
+```bash
+# Generate companion
+/buddy roll
+
+# View companion
+/buddy show
+```
+
+### Detailed Steps
+
+#### Companion Generation
+The Buddy system generates unique virtual companions for each user:
+- **Rarity**: Common(★), Rare(★★), Epic(★★★), Legendary(★★★★)
+- **Species**: Fox, cat, dog, dragon, rabbit, and more
+- **Appearance**: Different eyes, hats, color combinations
+- **Stats**: Attack, Defense, Speed, Intelligence, etc.
+
+```bash
+/buddy roll           # Randomly generate companion
+/buddy roll --seed    # Use fixed seed (reproducible)
+```
+
+#### Companion Naming
+```bash
+/buddy name "LittleFox"   # Name companion
+/buddy personality        # Set personality
+```
+
+#### Companion Display
+```bash
+/buddy show           # Show full card
+/buddy mini           # Show mini version
+/buddy bubble         # Show bubble format
+```
+
+### Examples
+```
+$ /buddy roll
+✨ New companion generated!
+
+╔════════════════════════════════╗
+║  ★★ Epic ★★                   ║
+║                                ║
+║    🐕 🎩 👀                    ║
+║                                ║
+║  Name: Unnamed                 ║
+║  Species: Dog                  ║
+║  Stats:                        ║
+║    ATK: 78  DEF: 45            ║
+║    SPD: 62  INT: 89            ║
+╚════════════════════════════════╝
+
+$ /buddy name "Buddy"
+Companion named: Buddy
+
+$ /buddy show
+╔════════════════════════════════╗
+║  ★★ Epic ★★                   ║
+║                                ║
+║    🐕 🎩 👀                    ║
+║                                ║
+║  Name: Buddy                   ║
+║  Species: Dog                  ║
+║  Personality: Brave, Loyal     ║
+║  Stats:                        ║
+║    ATK: 78  DEF: 45            ║
+║    SPD: 62  INT: 89            ║
+╚════════════════════════════════╝
+```
+
+---
+
+## Chapter 8: Vim Mode
+
+### Scenario
+You're a Vim user and want familiar Vim keybindings in h-agent.
+
+### Quick Start
+```bash
+/vim enable    # Enable Vim mode
+/vim status    # View status
+```
+
+### Detailed Steps
+
+#### Vim Mode States
+h-agent supports three Vim states:
+- **Normal mode**: Default state, execute Vim commands
+- **Insert mode**: Input text
+- **Command mode**: Execute REPL commands
+
+#### Keybindings
+Normal mode common keys:
+```
+i      - Enter Insert mode
+:      - Enter Command mode
+h/j/k/l - Directional movement
+w/b    - Word jumps
+dd     - Delete line
+yy     - Yank line
+p      - Paste
+u      - Undo
+Esc    - Return to Normal mode
+```
+
+Insert mode:
+```
+Esc    - Return to Normal mode
+Ctrl+C - Interrupt
+```
+
+Command mode:
+```
+Enter  - Execute command
+Esc    - Cancel command
+```
+
+### Examples
+```
+$ /vim enable
+Vim mode enabled
+Current state: Normal
+
+[Normal mode]
+Press i to start input...
+
+[Insert mode]
+Type your question...
+
+[Press Esc for Normal]
+Press :help for help...
+```
+
+---
+
+## Chapter 9: Voice Mode
+
+### Scenario
+You want to input questions via voice instead of typing.
+
+### Quick Start
+```bash
+/voice start    # Start recording
+/voice stop     # Stop and transcribe
+```
+
+### Detailed Steps
+
+#### Recording Control
+```bash
+/voice start          # Start recording
+/voice stop           # Stop and transcribe
+/voice cancel         # Cancel recording
+/voice status         # View recording status
+```
+
+#### Configuration
+```bash
+# Set speech recognition service
+h-agent config --stt-provider openai  # OpenAI Whisper
+h-agent config --stt-provider local   # Local model
+
+# Set recording duration limit
+h-agent config --voice-max-duration 60  # Max 60 seconds
+```
+
+### Examples
+```
+$ /voice start
+🎤 Recording started...
+[Recording: 3s]
+
+$ /voice stop
+🎤 Recording stopped, transcribing...
+Transcript: "Help me write a Python function to calculate Fibonacci"
+
+[AI Response]
+Sure, let me help you write a Fibonacci function...
+```
+
+---
+
+## Chapter 10: IDE Bridge
+
+### Scenario
+You want to use h-agent directly in your IDE (VS Code, JetBrains, etc.).
+
+### Quick Start
+```bash
+/bridge start    # Start bridge service
+```
+
+Then configure connection in your IDE.
+
+### Detailed Steps
+
+#### Starting Bridge
+```bash
+/bridge start           # Start HTTP server (default port 8080)
+/bridge start --port 9000  # Custom port
+/bridge status          # View status
+/bridge stop            # Stop service
+```
+
+#### API Endpoints
+Bridge service provides these APIs:
+```
+POST /chat              # Send message
+GET /status             # View status
+GET /sessions           # List sessions
+POST /session/create    # Create session
+GET /history/<id>       # Get history
+```
+
+#### IDE Integration
+VS Code extension configuration:
+```json
+{
+  "h-agent.bridge.url": "http://localhost:8080",
+  "h-agent.bridge.enabled": true
+}
+```
+
+### Examples
+```
+$ /bridge start
+Bridge service started
+Port: 8080
+Status: Running
+
+$ curl http://localhost:8080/chat -d '{"message": "hello"}'
+{"response": "Hello! How can I help you?"}
+
+$ /bridge status
+Service status: Running
+Port: 8080
+Active connections: 2
+Messages: 156
+```
+
+---
+
+## Chapter 11: Task Scheduling
+
+### Scenario
+You want to execute tasks periodically or maintain heartbeat monitoring.
+
+### Quick Start
+```bash
+/cron add "*/5 * * * *" "echo 'hello'" "Test"
+/heartbeat start
+```
+
+### Detailed Steps
+
+#### Cron Tasks
+```bash
+/cron add <expression> <command> <name>   # Add task
+/cron list                                # List tasks
+/cron enable <id>                         # Enable task
+/cron disable <id>                        # Disable task
+/cron delete <id>                         # Delete task
+/cron history <id>                        # View execution history
+```
+
+Cron expression format:
+```
+* * * * *
+│ │ │ │ │
+│ │ │ │ └── Day of week (0-6)
+│ │ │ └──── Month (1-12)
+│ │ └────── Day of month (1-31)
+│ └──────── Hour (0-23)
+└────────── Minute (0-59)
+```
+
+Example expressions:
+```
+*/5 * * * *    - Every 5 minutes
+0 9 * * *      - Every day at 9:00
+0 */2 * * *    - Every 2 hours
+30 14 * * 1-5  - Weekdays at 14:30
+```
+
+#### Heartbeat
+```bash
+/heartbeat start     # Start heartbeat monitoring
+/heartbeat stop      # Stop heartbeat
+/heartbeat status    # View status
+```
+
+Heartbeat features:
+- Periodic system status checks
+- Execute tasks in HEARTBEAT.md
+- Automatic update checks
+
+### Examples
+```
+$ /cron add "*/10 * * * *" "h-agent run 'check email'" "Email Check"
+Task added: cron-001
+Expression: */10 * * * *
+Next run: 10:10
+
+$ /cron list
+ID         Expression       Name        Status    Next Run
+cron-001   */10 * * * *    Email Check active   10:10
+cron-002   0 9 * * *       Daily Report active   09:00
+
+$ /heartbeat start
+Heartbeat started
+Interval: 30 minutes
+Status: Running
+
+$ /heartbeat status
+Heartbeat status: Running
+PID: 12345
+Started: 08:00
+Executions: 5
+Last execution: 09:30
+```
+
+---
+
+## Chapter 12: Plugin System
+
+### Scenario
+You want to extend h-agent's functionality by installing or developing plugins.
+
+### Quick Start
+```bash
+/plugin list           # List plugins
+/plugin enable <name>  # Enable plugin
+```
+
+### Detailed Steps
+
+#### Plugin Management
+```bash
+/plugin list              # List all plugins
+/plugin enable <name>     # Enable plugin
+/plugin disable <name>    # Disable plugin
+/plugin info <name>       # View plugin info
+/plugin install <path>    # Install local plugin
+/plugin uninstall <name>  # Uninstall plugin
+```
+
+#### Plugin Directory
+Plugins are stored in `~/.h-agent/plugins/`:
+```
+~/.h-agent/plugins/
+├── my-plugin/
+│   ├── manifest.yaml    # Plugin manifest
+│   ├── main.py          # Plugin entry
+│   └── tools.py         # Tool definitions
+│   └── handlers.py      # Command handlers
+```
+
+#### Plugin Manifest Format
+```yaml
+name: my-plugin
+version: 1.0.0
+description: My custom plugin
+author: your-name
+tools:
+  - my_custom_tool
+commands:
+  - /mycommand
+dependencies:
+  - requests
+```
+
+### Examples
+```
+$ /plugin list
+Name           Version  Status    Description
+web-ui         1.2.0    enabled   Web Interface
+advanced-rag   2.0.1    enabled   Advanced RAG
+code-review    0.9.0    disabled  Code Review
+my-plugin      1.0.0    enabled   Custom Plugin
+
+$ /plugin enable code-review
+Plugin enabled: code-review
+New tools: review_code, check_style
+New commands: /review
+
+$ /plugin info web-ui
+Name: web-ui
+Version: 1.2.0
+Author: h-agent-team
+Description: Web interface plugin
+Tools: web_start, web_stop
+Commands: /web
+Dependencies: flask, websocket
+```
+
+---
+
+## Appendix: Command Reference
+
+### Basic Commands
+| Command | Description |
+|---------|-------------|
+| `/help [command]` | Show help |
+| `/exit` | Exit |
+| `/clear` | Clear history |
+| `/history` | Show history |
+| `/status` | Session status |
+
+### Agent Commands
+| Command | Description |
+|---------|-------------|
+| `/model` | Show current model |
+| `/cost` | Token usage and cost |
+| `/usage` | Detailed usage stats |
+| `/config [key]` | Show config |
+| `/sessions` | List saved sessions |
+
+### Memory Commands
+| Command | Description |
+|---------|-------------|
+| `/memory list` | List all memories |
+| `/memory add <text>` | Add new memory |
+| `/memory search <query>` | Search memories |
+| `/memory stats` | Memory stats |
+| `/memory clear` | Clear memories |
+
+### Team Commands
+| Command | Description |
+|---------|-------------|
+| `/team start` | Start team mode |
+| `/team status` | Team status |
+| `/team assign <agent>` | Assign task |
+
+### MCP Commands
+| Command | Description |
+|---------|-------------|
+| `/mcp add <name>` | Add MCP server |
+| `/mcp list` | List MCPs |
+| `/mcp status` | MCP status |
+
+### Buddy Commands
+| Command | Description |
+|---------|-------------|
+| `/buddy roll` | Generate companion |
+| `/buddy show` | Show companion |
+| `/buddy name <name>` | Name companion |
+| `/buddy personality` | Set personality |
+
+### Vim Commands
+| Command | Description |
+|---------|-------------|
+| `/vim enable` | Enable Vim mode |
+| `/vim disable` | Disable Vim mode |
+| `/vim status` | Vim status |
+
+### Voice Commands
+| Command | Description |
+|---------|-------------|
+| `/voice start` | Start recording |
+| `/voice stop` | Stop and transcribe |
+| `/voice cancel` | Cancel recording |
+| `/voice status` | Recording status |
+
+### Bridge Commands
+| Command | Description |
+|---------|-------------|
+| `/bridge start` | Start bridge |
+| `/bridge stop` | Stop bridge |
+| `/bridge status` | Bridge status |
+
+### Scheduling Commands
+| Command | Description |
+|---------|-------------|
+| `/cron add` | Add cron task |
+| `/cron list` | List tasks |
+| `/cron enable/disable` | Enable/disable |
+| `/heartbeat start` | Start heartbeat |
+| `/heartbeat stop` | Stop heartbeat |
+| `/heartbeat status` | Heartbeat status |
+
+### Plugin Commands
+| Command | Description |
+|---------|-------------|
+| `/plugin list` | List plugins |
+| `/plugin enable/disable` | Enable/disable |
+| `/plugin info` | Plugin info |
+| `/plugin install` | Install plugin |
+
+---
+
+*"I would rather make mistakes than do nothing."*

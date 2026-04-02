@@ -41,6 +41,37 @@
   - [详细步骤](#详细步骤-4)
   - [示例](#示例-5)
   - [深入阅读](#深入阅读-5)
+- [第七章：Buddy伴侣系统](#第七章buddy伴侣系统)
+  - [场景描述](#场景描述-6)
+  - [快速上手](#快速上手-6)
+  - [详细步骤](#详细步骤-5)
+  - [示例](#示例-6)
+- [第八章：Vim模式](#第八章vim模式)
+  - [场景描述](#场景描述-7)
+  - [快速上手](#快速上手-7)
+  - [详细步骤](#详细步骤-6)
+  - [示例](#示例-7)
+- [第九章：语音模式](#第九章语音模式)
+  - [场景描述](#场景描述-8)
+  - [快速上手](#快速上手-8)
+  - [详细步骤](#详细步骤-7)
+  - [示例](#示例-8)
+- [第十章：IDE桥接](#第十章ide桥接)
+  - [场景描述](#场景描述-9)
+  - [快速上手](#快速上手-9)
+  - [详细步骤](#详细步骤-8)
+  - [示例](#示例-9)
+- [第十一章：任务调度](#第十一章任务调度)
+  - [场景描述](#场景描述-10)
+  - [快速上手](#快速上手-10)
+  - [详细步骤](#详细步骤-9)
+  - [示例](#示例-10)
+- [第十二章：插件系统](#第十二章插件系统)
+  - [场景描述](#场景描述-11)
+  - [快速上手](#快速上手-11)
+  - [详细步骤](#详细步骤-10)
+  - [示例](#示例-11)
+- [附录：命令速查表](#附录命令速查表)
 
 ---
 
@@ -789,3 +820,503 @@ Token 使用量: 156MB/天
 - [性能优化指南](performance/optimization.md)
 - [离线部署最佳实践](deployment/offline.md)
 - [插件开发文档](plugins/development.md)
+
+---
+
+## 第七章：Buddy伴侣系统
+
+### 场景描述
+你想要一个有趣的虚拟伴侣，增添日常使用的趣味性。
+
+### 快速上手
+```bash
+# 生成伴侣
+/buddy roll
+
+# 查看伴侣
+/buddy show
+```
+
+### 详细步骤
+
+#### 伴侣生成
+Buddy系统为每个用户生成独特的虚拟伴侣：
+- **稀有度**: Common(★), Rare(★★), Epic(★★★), Legendary(★★★★)
+- **种类**: 狐狸、猫、狗、龙、兔子等多种生物
+- **外观**: 不同的眼睛、帽子、颜色组合
+- **属性**: 攻击、防御、速度、智力等
+
+```bash
+/buddy roll           # 随机生成伴侣
+/buddy roll --seed    # 使用固定种子（可复现）
+```
+
+#### 伴侣命名
+```bash
+/buddy name "小狐狸"   # 命名伴侣
+/buddy personality    # 设置性格
+```
+
+#### 伴侣显示
+```bash
+/buddy show           # 显示完整卡片
+/buddy mini           # 显示迷你版
+/buddy bubble         # 显示气泡形式
+```
+
+### 示例
+```
+$ /buddy roll
+✨ 生成新伴侣!
+
+╔════════════════════════════════╗
+║  ★★ Epic ★★                   ║
+║                                ║
+║    🐕 🎩 👀                    ║
+║                                ║
+║  名字: 未命名                   ║
+║  种类: 狗                       ║
+║  属性:                          ║
+║    ATK: 78  DEF: 45            ║
+║    SPD: 62  INT: 89            ║
+╚════════════════════════════════╝
+
+$ /buddy name "旺财"
+伴侣已命名为: 旺财
+
+$ /buddy show
+╔════════════════════════════════╗
+║  ★★ Epic ★★                   ║
+║                                ║
+║    🐕 🎩 👀                    ║
+║                                ║
+║  名字: 旺财                     ║
+║  种类: 狗                       ║
+║  性格: 勇敢、忠诚                ║
+║  属性:                          ║
+║    ATK: 78  DEF: 45            ║
+║    SPD: 62  INT: 89            ║
+╚════════════════════════════════╝
+```
+
+---
+
+## 第八章：Vim模式
+
+### 场景描述
+你是Vim用户，想要在h-agent中使用熟悉的Vim键绑定。
+
+### 快速上手
+```bash
+/vim enable    # 启用Vim模式
+/vim status    # 查看状态
+```
+
+### 详细步骤
+
+#### Vim模式状态
+h-agent支持三种Vim状态：
+- **Normal模式**: 默认状态，可执行Vim命令
+- **Insert模式**: 输入文本
+- **Command模式**: 执行REPL命令
+
+#### 键绑定
+Normal模式常用键：
+```
+i      - 进入Insert模式
+:      - 进入Command模式
+h/j/k/l - 方向移动
+w/b    - 词间跳转
+dd     - 删除行
+yy     - 复制行
+p      - 粘贴
+u      - 撤销
+Esc    - 返回Normal模式
+```
+
+Insert模式：
+```
+Esc    - 返回Normal模式
+Ctrl+C - 中断
+```
+
+Command模式：
+```
+Enter  - 执行命令
+Esc    - 取消命令
+```
+
+### 示例
+```
+$ /vim enable
+Vim模式已启用
+当前状态: Normal
+
+[Normal模式]
+按 i 开始输入...
+
+[Insert模式]
+输入你的问题...
+
+[按Esc返回Normal]
+按 :help 查看帮助...
+```
+
+---
+
+## 第九章：语音模式
+
+### 场景描述
+你想要通过语音输入问题，而不是打字。
+
+### 快速上手
+```bash
+/voice start    # 开始录音
+/voice stop     # 停止并转文本
+```
+
+### 详细步骤
+
+#### 录音控制
+```bash
+/voice start          # 开始录音
+/voice stop           # 停止录音并转文本
+/voice cancel         # 取消录音
+/voice status         # 查看录音状态
+```
+
+#### 配置
+```bash
+# 设置语音识别服务
+h-agent config --stt-provider openai  # OpenAI Whisper
+h-agent config --stt-provider local   # 本地模型
+
+# 设置录音时长限制
+h-agent config --voice-max-duration 60  # 最大60秒
+```
+
+### 示例
+```
+$ /voice start
+🎤 开始录音...
+[录音中: 3s]
+
+$ /voice stop
+🎤 录音结束，正在转文本...
+转录结果: "帮我写一个Python函数，计算斐波那契数列"
+
+[AI回复]
+好的，我来帮你写一个斐波那契函数...
+```
+
+---
+
+## 第十章：IDE桥接
+
+### 场景描述
+你想要在IDE（VS Code、JetBrains等）中直接使用h-agent。
+
+### 快速上手
+```bash
+/bridge start    # 启动桥接服务
+```
+
+然后在IDE中配置连接。
+
+### 详细步骤
+
+#### 启动桥接
+```bash
+/bridge start           # 启动HTTP服务器（默认端口8080）
+/bridge start --port 9000  # 自定义端口
+/bridge status          # 查看状态
+/bridge stop            # 停止服务
+```
+
+#### API端点
+桥接服务提供以下API：
+```
+POST /chat              # 发送消息
+GET /status             # 查看状态
+GET /sessions           # 列出会话
+POST /session/create    # 创建会话
+GET /history/<id>       # 获取历史
+```
+
+#### IDE集成
+VS Code扩展配置：
+```json
+{
+  "h-agent.bridge.url": "http://localhost:8080",
+  "h-agent.bridge.enabled": true
+}
+```
+
+### 示例
+```
+$ /bridge start
+桥接服务已启动
+端口: 8080
+状态: 运行中
+
+$ curl http://localhost:8080/chat -d '{"message": "hello"}'
+{"response": "你好！有什么可以帮助你的？"}
+
+$ /bridge status
+服务状态: 运行中
+端口: 8080
+活跃连接: 2
+消息数: 156
+```
+
+---
+
+## 第十一章：任务调度
+
+### 场景描述
+你想要定期执行某些任务，或者保持心跳监控。
+
+### 快速上手
+```bash
+/cron add "*/5 * * * *" "echo 'hello'" "测试"
+/heartbeat start
+```
+
+### 详细步骤
+
+#### Cron任务
+```bash
+/cron add <表达式> <命令> <名称>   # 添加任务
+/cron list                        # 列出任务
+/cron enable <id>                 # 启用任务
+/cron disable <id>                # 禁用任务
+/cron delete <id>                 # 删除任务
+/cron history <id>                # 查看执行历史
+```
+
+Cron表达式格式：
+```
+* * * * *
+│ │ │ │ │
+│ │ │ │ └── 星期几 (0-6)
+│ │ │ └──── 月份 (1-12)
+│ │ └────── 日期 (1-31)
+│ └──────── 小时 (0-23)
+└────────── 分钟 (0-59)
+```
+
+示例表达式：
+```
+*/5 * * * *    - 每5分钟
+0 9 * * *      - 每天9:00
+0 */2 * * *    - 每2小时
+30 14 * * 1-5  - 工作日14:30
+```
+
+#### Heartbeat
+```bash
+/heartbeat start     # 启动心跳监控
+/heartbeat stop      # 停止心跳
+/heartbeat status    # 查看状态
+```
+
+心跳功能：
+- 定期检查系统状态
+- 执行HEARTBEAT.md中的任务
+- 自动更新检查
+
+### 示例
+```
+$ /cron add "*/10 * * * *" "h-agent run '检查邮件'" "邮件检查"
+任务已添加: cron-001
+表达式: */10 * * * *
+下次执行: 10:10
+
+$ /cron list
+ID         表达式          名称        状态    下次执行
+cron-001   */10 * * * *   邮件检查    active  10:10
+cron-002   0 9 * * *      每日报告    active  09:00
+
+$ /heartbeat start
+心跳已启动
+间隔: 30分钟
+状态: 运行中
+
+$ /heartbeat status
+心跳状态: 运行中
+PID: 12345
+开始时间: 08:00
+执行次数: 5
+最后执行: 09:30
+```
+
+---
+
+## 第十二章：插件系统
+
+### 场景描述
+你想要扩展h-agent的功能，安装或开发插件。
+
+### 快速上手
+```bash
+/plugin list           # 列出插件
+/plugin enable <name>  # 启用插件
+```
+
+### 详细步骤
+
+#### 插件管理
+```bash
+/plugin list              # 列出所有插件
+/plugin enable <name>     # 启用插件
+/plugin disable <name>    # 禁用插件
+/plugin info <name>       # 查看插件信息
+/plugin install <path>    # 安装本地插件
+/plugin uninstall <name>  # 卸载插件
+```
+
+#### 插件目录
+插件存放在 `~/.h-agent/plugins/` 目录：
+```
+~/.h-agent/plugins/
+├── my-plugin/
+│   ├── manifest.yaml    # 插件清单
+│   ├── main.py          # 插件入口
+│   └── tools.py         # 工具定义
+│   └── handlers.py      # 命令处理
+```
+
+#### 插件清单格式
+```yaml
+name: my-plugin
+version: 1.0.0
+description: 我的自定义插件
+author: your-name
+tools:
+  - my_custom_tool
+commands:
+  - /mycommand
+dependencies:
+  - requests
+```
+
+### 示例
+```
+$ /plugin list
+名称           版本    状态      描述
+web-ui         1.2.0   enabled   Web界面
+advanced-rag   2.0.1   enabled   高级RAG
+code-review    0.9.0   disabled  代码审查
+my-plugin      1.0.0   enabled   自定义插件
+
+$ /plugin enable code-review
+插件已启用: code-review
+新增工具: review_code, check_style
+新增命令: /review
+
+$ /plugin info web-ui
+名称: web-ui
+版本: 1.2.0
+作者: h-agent-team
+描述: Web界面插件
+工具: web_start, web_stop
+命令: /web
+依赖: flask, websocket
+```
+
+---
+
+## 附录：命令速查表
+
+### 基础命令
+| 命令 | 说明 |
+|------|------|
+| `/help [command]` | 显示帮助 |
+| `/exit` | 退出 |
+| `/clear` | 清空历史 |
+| `/history` | 显示历史 |
+| `/status` | 会话状态 |
+
+### Agent命令
+| 命令 | 说明 |
+|------|------|
+| `/model` | 显示当前模型 |
+| `/cost` | Token使用和成本 |
+| `/usage` | 详细使用统计 |
+| `/config [key]` | 显示配置 |
+| `/sessions` | 列出保存的会话 |
+
+### 记忆命令
+| 命令 | 说明 |
+|------|------|
+| `/memory list` | 列出所有记忆 |
+| `/memory add <text>` | 添加新记忆 |
+| `/memory search <query>` | 搜索记忆 |
+| `/memory stats` | 记忆统计 |
+| `/memory clear` | 清空记忆 |
+
+### 团队命令
+| 命令 | 说明 |
+|------|------|
+| `/team start` | 启动团队模式 |
+| `/team status` | 团队状态 |
+| `/team assign <agent>` | 分配任务 |
+
+### MCP命令
+| 命令 | 说明 |
+|------|------|
+| `/mcp add <name>` | 添加MCP服务器 |
+| `/mcp list` | 列出MCP |
+| `/mcp status` | MCP状态 |
+
+### Buddy命令
+| 命令 | 说明 |
+|------|------|
+| `/buddy roll` | 生成伴侣 |
+| `/buddy show` | 显示伴侣 |
+| `/buddy name <name>` | 命名伴侣 |
+| `/buddy personality` | 设置性格 |
+
+### Vim命令
+| 命令 | 说明 |
+|------|------|
+| `/vim enable` | 启用Vim模式 |
+| `/vim disable` | 禁用Vim模式 |
+| `/vim status` | Vim状态 |
+
+### 语音命令
+| 命令 | 说明 |
+|------|------|
+| `/voice start` | 开始录音 |
+| `/voice stop` | 停止并转文本 |
+| `/voice cancel` | 取消录音 |
+| `/voice status` | 录音状态 |
+
+### 桥接命令
+| 命令 | 说明 |
+|------|------|
+| `/bridge start` | 启动桥接 |
+| `/bridge stop` | 停止桥接 |
+| `/bridge status` | 桥接状态 |
+
+### 调度命令
+| 命令 | 说明 |
+|------|------|
+| `/cron add` | 添加Cron任务 |
+| `/cron list` | 列出任务 |
+| `/cron enable/disable` | 启用/禁用 |
+| `/heartbeat start` | 启动心跳 |
+| `/heartbeat stop` | 停止心跳 |
+| `/heartbeat status` | 心跳状态 |
+
+### 插件命令
+| 命令 | 说明 |
+|------|------|
+| `/plugin list` | 列出插件 |
+| `/plugin enable/disable` | 启用/禁用 |
+| `/plugin info` | 插件信息 |
+| `/plugin install` | 安装插件 |
+
+---
+
+*"我宁愿犯错，也不愿什么都不做。"*
