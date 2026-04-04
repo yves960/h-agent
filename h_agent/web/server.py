@@ -100,7 +100,7 @@ def get_agent_tools():
 async def run_agent_async(messages: list, q: queue.Queue, session_id: str = None, mgr = None):
     """Run the agent loop and put SSE events into a queue."""
     from openai import OpenAI
-    from h_agent.logging_config import get_llm_logger, get_agent_logger, trace
+    from h_agent.logging_config import get_llm_logger, get_agent_logger, trace, log_llm_call
     
     client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     tools = get_agent_tools()
@@ -170,7 +170,7 @@ async def run_agent_async(messages: list, q: queue.Queue, session_id: str = None
                 })
                 
             except Exception as e:
-                q.put(("error", {"error": str(e)}))
+                q.put(("error", {"error": f"Internal error: {type(e).__name__}"}))
                 break
         
         if session_id and mgr and full_response:
@@ -179,7 +179,7 @@ async def run_agent_async(messages: list, q: queue.Queue, session_id: str = None
         q.put(("end", {"done": True}))
         
     except Exception as e:
-        q.put(("error", {"error": str(e)}))
+        q.put(("error", {"error": f"Internal error: {type(e).__name__}"}))
 
 
 # ---- Routes ----

@@ -148,6 +148,10 @@ class HAgentUI {
     }
     
     async newChat() {
+        const btn = this.newChatBtn;
+        btn.disabled = true;
+        btn.textContent = 'Creating...';
+        
         this.currentSessionId = null;
         this.messagesEl.innerHTML = '';
         this.addWelcomeMessage();
@@ -162,6 +166,9 @@ class HAgentUI {
         }
         this.renderSessions();
         this.messageInput.focus();
+        
+        btn.disabled = false;
+        btn.textContent = '+ New Chat';
     }
     
     addWelcomeMessage() {
@@ -221,7 +228,12 @@ class HAgentUI {
         // Show typing indicator
         const typingEl = this.addTypingIndicator();
         
+        const sendBtn = this.chatForm.querySelector('.btn-send');
+        const sendBtnOriginal = sendBtn.textContent;
+        
         this.isStreaming = true;
+        sendBtn.disabled = true;
+        sendBtn.textContent = '⏳';
         
         try {
             const res = await fetch('/api/chat', {
@@ -237,8 +249,12 @@ class HAgentUI {
             this.removeTypingIndicator(typingEl);
             
             if (!res.ok) {
-                const err = await res.json();
-                this.addMessage('assistant', 'Error: ' + (err.error || 'Unknown error'));
+                let errMsg = 'Failed to send message. Please try again.';
+                try {
+                    const err = await res.json();
+                    errMsg = err.error || errMsg;
+                } catch(e) {}
+                this.addMessage('assistant', '⚠️ ' + errMsg);
                 return;
             }
             
@@ -292,9 +308,11 @@ class HAgentUI {
             
         } catch (e) {
             this.removeTypingIndicator(typingEl);
-            this.addMessage('assistant', 'Error: ' + e.message);
+            this.addMessage('assistant', '⚠️ Network error. Please check your connection and try again.');
         } finally {
             this.isStreaming = false;
+            sendBtn.disabled = false;
+            sendBtn.textContent = sendBtnOriginal;
         }
     }
     
@@ -315,10 +333,15 @@ class HAgentUI {
         
         if (data.error) {
             const contentEl = assistantEl.querySelector('.message-content');
+            const userFriendlyError = data.error
+                .replace(/Error:/i, '')
+                .replace(/name ['"].*?['"] is not defined/gi, 'internal server error')
+                .replace(/Traceback.*/s, 'internal error')
+                .trim();
             if (contentEl.textContent) {
-                contentEl.textContent += '\n[Error: ' + data.error + ']';
+                contentEl.textContent += '\n⚠️ ' + userFriendlyError;
             } else {
-                contentEl.textContent = 'Error: ' + data.error;
+                contentEl.textContent = '⚠️ ' + userFriendlyError;
             }
         }
         

@@ -23,7 +23,7 @@ from typing import Any, List, Dict, Optional
 from dataclasses import dataclass, field, asdict
 from h_agent.core.client import get_client
 from h_agent.features.subagents import run_subagent
-from h_agent.logging_config import get_llm_logger, get_agent_logger, trace
+from h_agent.logging_config import get_llm_logger, get_agent_logger, trace, log_llm_call
 
 client = get_client()
 MODEL = os.getenv("MODEL_ID", "gpt-4o")

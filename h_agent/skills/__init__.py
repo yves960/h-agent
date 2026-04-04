@@ -109,9 +109,9 @@ def _discover_local_skills() -> List[Path]:
         if not skills_dir.exists():
             continue
         for item in skills_dir.iterdir():
-            if item.is_file() and item.suffix == ".py" and item.stem not in ("__init__", "__base__"):
+            if item.is_file() and item.suffix == ".py" and item.stem not in ("__init__", "__base__", "registry", "loader", "base"):
                 skills.append(item)
-            elif item.is_dir() and (item / "__init__.py").exists():
+            elif item.is_dir() and (item / "__init__.py").exists() and item.name not in ("builtin",):
                 skills.append(item)
     return skills
 
