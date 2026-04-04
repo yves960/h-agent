@@ -32,6 +32,14 @@ jobs:
         run: |
           pip install pytest pytest-cov pytest-mock
 
+      - name: Install ripgrep (for GrepTool)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y ripgrep
+
+      - name: Install ripgrep (for GrepTool) - macOS
+        if: runner.os == 'macOS'
+        run: brew install ripgrep
+
       - name: Run tests
         run: |
           pytest tests/ -v --tb=short

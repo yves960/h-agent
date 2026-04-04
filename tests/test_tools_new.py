@@ -4,6 +4,7 @@ tests/test_tools_new.py - Tests for new tools (glob, grep, web_fetch, web_search
 
 import pytest
 import asyncio
+import sys
 from pathlib import Path
 
 from h_agent.tools import get_registry
@@ -152,6 +153,10 @@ class TestWebFetchTool:
         assert tool.concurrency_safe is True
     
     @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        sys.platform == "darwin",
+        reason="macOS CI has SSL certificate issues"
+    )
     async def test_fetch_url(self, tool):
         """Should fetch URL content."""
         result = await tool.execute({

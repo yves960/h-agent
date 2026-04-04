@@ -226,8 +226,9 @@ def classify_exception(exc: Exception) -> AgentError:
     import httpx
     import openai
 
-    if isinstance(exc, asyncio.TimeoutError):
-        return AgentError.timeout_error(f"Async timeout: {exc_msg}")
+    # Check for timeout errors (built-in TimeoutError and asyncio.TimeoutError)
+    if isinstance(exc, TimeoutError) or isinstance(exc, asyncio.TimeoutError):
+        return AgentError.timeout_error(f"Timeout: {exc_msg}")
 
     if isinstance(exc, httpx.TimeoutException):
         return AgentError.timeout_error(f"HTTP timeout: {exc_msg}")
