@@ -31,7 +31,15 @@ Or install from source:
 ```bash
 git clone https://github.com/user/h-agent.git
 cd h-agent
+python -m venv .venv
+source .venv/bin/activate
 pip install -e .
+```
+
+For local development and the full async test suite, install dev dependencies:
+
+```bash
+pip install -e .[dev]
 ```
 
 ### Windows Installation
@@ -79,31 +87,12 @@ h-agent init
 - **PowerShell** is recommended over CMD for better compatibility
 - Some Unix-specific commands (like `which`, `grep`) are not available on Windows; h-agent will automatically use alternatives
 
-## Project Introduction
-
-`h-agent` is an AI API-based programming agent framework with modular architecture, supporting CLI interaction, tool calling, session management, sub-agents, and more.
-
-*"It's not about how much time you have, but how you use it."*
-
----
-
-## Installation
-
-```bash
-pip install h-agent
-```
-
-Or install from source:
-
-```bash
-git clone https://github.com/user/h-agent.git
-cd h-agent
-pip install -e .
-```
-
----
-
 ## Quick Start
+
+For the complete product walkthrough and acceptance flow, see:
+
+- [Full Experience Flow](docs/guides/full-experience-flow.md)
+- `scripts/verify_full_experience.py`
 
 ### Method 1: Interactive Setup Wizard
 
@@ -128,12 +117,27 @@ MODEL_ID=gpt-4o
 ### Start Conversation
 
 ```bash
-# Interactive mode
-h-agent
-
-# Or
 h-agent chat
+
+# Or single-shot mode
+h-agent run "Explain the current directory"
+
+# Module mode is equivalent
+python -m h_agent chat
 ```
+
+Notes:
+- Prefer `h-agent <subcommand>` or `python -m h_agent <subcommand>`
+- `python -m h_agent` now uses the same full CLI as `h-agent`
+- The docs use `h-agent chat` explicitly because it is clearer than the bare entrypoint
+
+### Run Tests
+
+```bash
+.venv/bin/pytest -q
+```
+
+Running `pytest` from a different environment can produce false failures if async plugins are missing.
 
 ---
 
@@ -213,6 +217,16 @@ h-agent config --clear-key         # Clear API Key
 h-agent config --base-url URL       # Set API Base URL
 h-agent config --model MODEL        # Set model
 h-agent config --wizard             # Run interactive setup wizard
+```
+
+### python -m h_agent
+
+Module mode is equivalent to the full CLI:
+
+```bash
+python -m h_agent --help
+python -m h_agent chat
+python -m h_agent run "hello"
 ```
 
 ---

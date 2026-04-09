@@ -83,7 +83,16 @@ class TestPathUtilities:
         assert isinstance(config_dir, Path)
         # Should be under home directory or APPDATA on Windows
         home = Path.home()
-        assert str(config_dir).startswith(str(home)) or ".h-agent" in str(config_dir)
+        assert (
+            str(config_dir).startswith(str(home))
+            or ".h-agent" in str(config_dir)
+            or str(config_dir).startswith("/tmp")
+        )
+
+    def test_get_config_dir_respects_h_agent_home(self, monkeypatch, tmp_path):
+        custom_home = tmp_path / "custom-state"
+        monkeypatch.setenv("H_AGENT_HOME", str(custom_home))
+        assert get_config_dir() == custom_home
 
     def test_normalize_path(self):
         result = normalize_path("a/b/c")

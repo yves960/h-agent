@@ -5,6 +5,7 @@ Search the web using DuckDuckGo.
 """
 
 import re
+import asyncio
 import urllib.parse
 from typing import Optional
 

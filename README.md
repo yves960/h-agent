@@ -31,7 +31,15 @@ pip install h-agent
 ```bash
 git clone https://github.com/user/h-agent.git
 cd h-agent
+python -m venv .venv
+source .venv/bin/activate
 pip install -e .
+```
+
+如果你要跑完整配置、测试和异步用例，建议安装开发依赖：
+
+```bash
+pip install -e .[dev]
 ```
 
 ### Windows 安装
@@ -79,31 +87,12 @@ h-agent init
 - 推荐使用 **PowerShell** 而非 CMD 以获得更好的兼容性
 - 部分 Unix 特定命令（如 `which`, `grep`）在 Windows 上不可用，h-agent 会自动使用替代方案
 
-## 项目介绍
-
-`h-agent` 是一个基于 AI API 的编程智能体框架，提供模块化架构，支持 CLI 交互、工具调用、会话管理、子智能体等特性。
-
-*"时间不在于你拥有多少，而在于你如何使用。"*
-
----
-
-## 安装
-
-```bash
-pip install h-agent
-```
-
-或从源码安装：
-
-```bash
-git clone https://github.com/user/h-agent.git
-cd h-agent
-pip install -e .
-```
-
----
-
 ## 快速开始
+
+完整体验与验收流程见：
+
+- [完整体验流程](docs/guides/full-experience-flow.md)
+- `scripts/verify_full_experience.py`
 
 ### 方式一：交互式设置向导
 
@@ -128,12 +117,27 @@ MODEL_ID=gpt-4o
 ### 开始对话
 
 ```bash
-# 交互模式
-h-agent
-
-# 或
 h-agent chat
+
+# 或单次执行
+h-agent run "帮我解释当前目录结构"
+
+# 模块方式与 h-agent 等价
+python -m h_agent chat
 ```
+
+说明：
+- 推荐统一使用 `h-agent <subcommand>` 或 `python -m h_agent <subcommand>`
+- `python -m h_agent` 现在与 `h-agent` 使用同一套完整 CLI
+- `h-agent chat` 比裸 `h-agent` 更清晰，文档默认使用它
+
+### 运行测试
+
+```bash
+.venv/bin/pytest -q
+```
+
+如果直接运行系统环境里的 `pytest`，可能因为缺少异步插件而出现误报。
 
 ---
 
@@ -217,6 +221,16 @@ h-agent config --clear-key         # 清除 API Key
 h-agent config --base-url URL       # 设置 API Base URL
 h-agent config --model MODEL        # 设置模型
 h-agent config --wizard             # 运行交互式设置向导
+```
+
+### python -m h_agent
+
+模块方式等价于完整 CLI：
+
+```bash
+python -m h_agent --help
+python -m h_agent chat
+python -m h_agent run "hello"
 ```
 
 ---

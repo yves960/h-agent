@@ -11,7 +11,11 @@ h-agent is a modular AI programming agent framework supporting session managemen
 ### 1. Install
 
 ```bash
-pip install h-agent
+git clone https://github.com/user/h-agent.git
+cd h-agent
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .[dev]
 ```
 
 ### 2. Configure (First Time)
@@ -26,9 +30,21 @@ Follow the prompts to enter your API Key and select a model. Done!
 
 ```bash
 h-agent chat
+
+# Or single-shot mode
+h-agent run "Give me an overview of this project"
+
+# Module mode is equivalent
+python -m h_agent chat
 ```
 
 Type your question and press Enter to send. Type `q` to exit.
+
+If you only need the published package, you can also use:
+
+```bash
+pip install h-agent
+```
 
 ---
 
@@ -49,6 +65,7 @@ Type your question and press Enter to send. Type `q` to exit.
 | `h-agent skill list` | List available skills |
 | `h-agent rag index` | Index codebase (enable RAG) |
 | `h-agent memory list` | View long-term memory |
+| `.venv/bin/pytest -q` | Run tests |
 
 ---
 
@@ -61,6 +78,8 @@ Type your question and press Enter to send. Type `q` to exit.
 >> /history        # View message count
 >> q              # Exit
 ```
+
+Prefer `h-agent chat` over the bare entrypoint so it stays consistent with `run`, `session`, and `config`.
 
 ### Use Named Sessions
 

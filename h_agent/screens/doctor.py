@@ -156,8 +156,8 @@ class DoctorScreen:
                 "Tools",
                 "pass",
                 f"{len(tools)} tools registered",
-                ", ".join(t.get("name", "unknown") for t in tools[:5]) + "..."
-                if len(tools) > 5 else ", ".join(t.get("name", "unknown") for t in tools)
+                ", ".join(tools[:5]) + "..."
+                if len(tools) > 5 else ", ".join(tools)
             )
         except Exception as e:
             self._add_result("Tools", "fail", f"Error: {str(e)[:50]}")

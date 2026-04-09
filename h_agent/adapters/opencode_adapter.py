@@ -5,13 +5,11 @@ Integrates with opencode CLI via `opencode run --format json`.
 """
 
 import json
+import os
 import subprocess
 import threading
-import re
-import os
-import queue
+import uuid
 from typing import Iterator, Optional, Any
-from dataclasses import asdict
 
 from h_agent.adapters.base import (
     BaseAgentAdapter,
@@ -126,7 +124,7 @@ class OpencodeAdapter(BaseAgentAdapter):
 
     def _extract_metadata(self, events: list[dict]) -> dict[str, Any]:
         """Extract metadata (session ID, tokens, etc.) from events."""
-        meta = {}
+        meta = {"session_id": self._session_id}
         for event in events:
             if "sessionID" in event:
                 meta["session_id"] = event["sessionID"]
@@ -138,6 +136,23 @@ class OpencodeAdapter(BaseAgentAdapter):
                 meta["tokens"] = part.get("tokens")
         return meta
 
+    def _ensure_session_id(self) -> str:
+        """Create a stable synthetic session ID before the subprocess returns one."""
+        if self._session_id is None:
+            self._session_id = f"opencode-{uuid.uuid4().hex[:12]}"
+        return self._session_id
+
+    def _summarize_stderr(self, stderr: str) -> str:
+        """Normalize common CLI/network failures into a predictable error string."""
+        cleaned = " ".join(stderr.split())
+        lowered = cleaned.lower()
+
+        if "timed out" in lowered or "timeout" in lowered:
+            return f"timeout: {cleaned[:400]}"
+        if "unable to connect" in lowered or "failed to fetch" in lowered:
+            return f"timeout: network unavailable for opencode: {cleaned[:400]}"
+        return f"opencode error: {cleaned[:400]}"
+
     def chat(self, message: str, **kwargs) -> AgentResponse:
         """
         Send a message and get a complete response.
@@ -147,6 +162,7 @@ class OpencodeAdapter(BaseAgentAdapter):
         """
         args = self._build_args(message)
         events = []
+        self._ensure_session_id()
         
         self._set_status(AdapterStatus.RUNNING)
         
@@ -191,8 +207,11 @@ class OpencodeAdapter(BaseAgentAdapter):
         # Check for errors in stderr
         if proc.returncode != 0 and proc.stderr:
             stderr = proc.stderr.read()
-            if stderr and not content:
-                return AgentResponse(error=f"opencode error: {stderr[:500]}")
+            if stderr:
+                error = self._summarize_stderr(stderr)
+                if not content:
+                    content = error
+                return AgentResponse(content=content, error=error, metadata=metadata)
         
         return AgentResponse(
             content=content,
@@ -207,7 +226,7 @@ class OpencodeAdapter(BaseAgentAdapter):
         Yields text tokens as they arrive from opencode.
         """
         args = self._build_args(message)
-        events = []
+        self._ensure_session_id()
         
         self._set_status(AdapterStatus.RUNNING)
         

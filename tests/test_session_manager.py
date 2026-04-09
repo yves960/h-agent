@@ -49,6 +49,12 @@ class TestSessionManager:
         session = mgr.create_session(name="my-project")
         assert session["name"] == "my-project"
 
+    def test_session_dir_is_instance_scoped(self, tmp_path):
+        scoped_dir = tmp_path / "scoped-sessions"
+        mgr = SessionManager(session_dir=scoped_dir)
+        session = mgr.create_session(name="scoped")
+        assert (scoped_dir / f"{session['session_id']}.jsonl").exists()
+
     def test_create_session_with_group(self, mgr):
         session = mgr.create_session(group="work")
         assert session["group"] == "work"

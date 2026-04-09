@@ -21,6 +21,7 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Optional
+from argparse import Namespace
 
 # Add parent to path for imports when running directly
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -62,6 +63,28 @@ def _warn(msg: str):
 
 def _ok(msg: str):
     print(f"\033[32m{msg}\033[0m")
+
+
+def _format_api_error(exc: Exception) -> str:
+    """Normalize API failures into actionable diagnostics."""
+    message = str(exc).strip() or exc.__class__.__name__
+    exc_name = exc.__class__.__name__.lower()
+    lowered = message.lower()
+
+    if "authentication" in exc_name or "api key" in lowered:
+        return f"Authentication failed. Check OPENAI_API_KEY. Details: {message}"
+    if "permission" in exc_name:
+        return f"Permission error from API provider. Details: {message}"
+    if "connection" in exc_name or "connect" in lowered:
+        return (
+            "Connection error. Check OPENAI_BASE_URL, network access, proxy, and TLS settings. "
+            f"Details: {message}"
+        )
+    if "timeout" in exc_name or "timed out" in lowered:
+        return f"Request timed out. Check network latency or retry later. Details: {message}"
+    if "notfound" in exc_name or ("model" in lowered and "not found" in lowered):
+        return f"Model or endpoint not found. Check MODEL_ID and OPENAI_BASE_URL. Details: {message}"
+    return f"{exc.__class__.__name__}: {message}"
 
 def _find_session(mgr: SessionManager, session_id: str) -> Optional[str]:
     """Find session ID by name or ID, return canonical ID or None."""
@@ -1225,7 +1248,7 @@ def cmd_run(args) -> int:
             })
 
         except Exception as e:
-            _err(str(e))
+            _err(_format_api_error(e))
             return 1
 
     return 0
@@ -1251,6 +1274,7 @@ def cmd_chat(args) -> int:
             session_id = session["session_id"]
         else:
             session_id = mgr.get_current()
+    mgr.set_current(session_id)
 
     print(f"\033[36mh_agent - Chat Mode\033[0m")
     print(f"Session: {session_id}")
@@ -1329,8 +1353,17 @@ def cmd_chat(args) -> int:
                 api_messages = [{"role": "system", "content": system_prompt}] + messages
 
         except Exception as e:
-            print(f"\033[31mError: {e}\033[0m")
+            _err(_format_api_error(e))
 
+    return 0
+
+
+def cmd_doctor(args) -> int:
+    """Handle doctor command."""
+    from h_agent.screens.doctor import DoctorScreen
+
+    screen = DoctorScreen()
+    print(screen.render())
     return 0
 
 
@@ -2334,6 +2367,9 @@ def main():
     init_parser = subparsers.add_parser("init", help="Initialize h-agent with interactive setup")
     init_parser.add_argument("--quick", action="store_true", help="Quick setup mode")
 
+    # ---- Doctor ----
+    doctor_parser = subparsers.add_parser("doctor", help="Run environment diagnostics")
+
     # ---- Web UI ----
     web_parser = subparsers.add_parser("web", help="Start Web UI server")
     web_parser.add_argument("--port", type=int, default=8080, help="Port to run on (default: 8080)")
@@ -2465,6 +2501,9 @@ def main():
 
     if args.command == "init":
         return cmd_init(args)
+
+    if args.command == "doctor":
+        return cmd_doctor(args)
 
     if args.command == "web":
         return cmd_web(args)

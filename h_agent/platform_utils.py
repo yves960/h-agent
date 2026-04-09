@@ -14,6 +14,7 @@ import os
 import signal
 import subprocess
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -102,12 +103,7 @@ def which_all(cmd: str) -> list:
 
 def daemon_pid_file() -> Path:
     """Get the daemon PID file path (platform-aware)."""
-    if IS_WINDOWS:
-        # On Windows, use APPDATA
-        appdata = os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming"))
-        base = Path(appdata) / "h-agent"
-    else:
-        base = Path.home() / ".h-agent"
+    base = get_config_dir()
     base.mkdir(parents=True, exist_ok=True)
     return base / "daemon.pid"
 
@@ -250,10 +246,49 @@ def get_config_dir() -> Path:
     - Linux/macOS: ~/.h-agent
     - Windows: %APPDATA%/h-agent
     """
+    explicit = os.environ.get("H_AGENT_HOME")
+    if explicit:
+        return _ensure_writable_state_dir(Path(explicit))
+
     if IS_WINDOWS:
         appdata = os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming"))
-        return Path(appdata) / "h-agent"
-    return Path.home() / ".h-agent"
+        default_dir = Path(appdata) / "h-agent"
+    else:
+        xdg_state = os.environ.get("XDG_STATE_HOME")
+        if xdg_state:
+            default_dir = Path(xdg_state) / "h-agent"
+        else:
+            default_dir = Path.home() / ".h-agent"
+
+    return _ensure_writable_state_dir(default_dir)
+
+
+def _ensure_writable_state_dir(preferred: Path) -> Path:
+    """Return a writable state directory, falling back when the home path is not writable."""
+    if _is_dir_writable(preferred):
+        return preferred
+
+    workspace_fallback = Path.cwd() / ".agent_workspace" / ".h-agent"
+    if _is_dir_writable(workspace_fallback):
+        return workspace_fallback
+
+    temp_fallback = Path(tempfile.gettempdir()) / "h-agent"
+    if _is_dir_writable(temp_fallback):
+        return temp_fallback
+
+    return preferred
+
+
+def _is_dir_writable(path: Path) -> bool:
+    """Best-effort writability check that creates the directory if possible."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
 
 
 def get_workspace_default() -> Path:

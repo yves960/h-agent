@@ -14,6 +14,9 @@ import uuid
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Set
+from tempfile import NamedTemporaryFile
+
+from h_agent.platform_utils import get_config_dir
 
 IS_WINDOWS = sys.platform == "win32"
 _msvcrt: Any = None
@@ -24,7 +27,7 @@ if IS_WINDOWS:
     except ImportError:
         pass
 
-SESSION_DIR = Path.home() / ".h-agent" / "sessions"
+SESSION_DIR = get_config_dir() / "sessions"
 
 
 @contextlib.contextmanager
@@ -68,43 +71,65 @@ class SessionManager:
     Supports tags, groups, and search.
     """
 
-    def __init__(self):
+    def __init__(self, session_dir: Optional[Path] = None):
         self.sessions: Dict[str, Dict[str, Any]] = {}
         self.tags_index: Dict[str, Set[str]] = {}  # tag -> session_ids
         self.groups_index: Dict[str, Set[str]] = {}  # group_name -> session_ids
         self.current_session: Optional[str] = None
-        SESSION_DIR.mkdir(parents=True, exist_ok=True)
+        self.session_dir = Path(session_dir) if session_dir is not None else Path(SESSION_DIR)
+        self.session_dir.mkdir(parents=True, exist_ok=True)
         self._load_index()
         self._load_tags()
 
+    def _index_file(self) -> Path:
+        return self.session_dir / "index.json"
+
     def _load_index(self):
         """Load session index from disk."""
-        index_file = SESSION_DIR / "index.json"
+        index_file = self._index_file()
         if index_file.exists():
             try:
-                with open(index_file) as f:
-                    self.sessions = json.load(f)
+                with _file_lock(index_file, mode="r"):
+                    with open(index_file) as f:
+                        self.sessions = json.load(f)
             except json.JSONDecodeError:
                 self.sessions = {}
 
-    def _save_index(self):
+    def _save_index(self, merge: bool = True):
         """Save session index to disk."""
-        index_file = SESSION_DIR / "index.json"
-        with open(index_file, "w") as f:
-            json.dump(self.sessions, f, indent=2, ensure_ascii=False)
+        index_file = self._index_file()
+        existing: Dict[str, Dict[str, Any]] = {}
+        with _file_lock(index_file, mode="w"):
+            if merge and index_file.exists():
+                try:
+                    with open(index_file) as f:
+                        existing = json.load(f)
+                except json.JSONDecodeError:
+                    existing = {}
+
+            if merge:
+                merged = dict(existing)
+                merged.update(self.sessions)
+                self.sessions = merged
+
+            with NamedTemporaryFile("w", delete=False, dir=self.session_dir, encoding="utf-8") as tmp:
+                json.dump(self.sessions, tmp, indent=2, ensure_ascii=False)
+                tmp_path = Path(tmp.name)
+            tmp_path.replace(index_file)
 
     def _tags_file(self) -> Path:
-        return SESSION_DIR / "tags.json"
+        return self.session_dir / "tags.json"
 
     def _load_tags(self):
         """Load tags index from disk."""
         tags_file = self._tags_file()
         if tags_file.exists():
             try:
-                with open(tags_file) as f:
-                    raw = json.load(f)
-                    self.tags_index = {k: set(v) for k, v in raw.get("tags", {}).items()}
-                    self.groups_index = {k: set(v) for k, v in raw.get("groups", {}).items()}
+                with _file_lock(tags_file, mode="r"):
+                    with open(tags_file) as f:
+                        raw = json.load(f)
+                        self.tags_index = {k: set(v) for k, v in raw.get("tags", {}).items()}
+                        self.groups_index = {k: set(v) for k, v in raw.get("groups", {}).items()}
             except json.JSONDecodeError:
                 self.tags_index = {}
                 self.groups_index = {}
@@ -115,14 +140,17 @@ class SessionManager:
     def _save_tags(self):
         """Save tags and groups index to disk."""
         tags_file = self._tags_file()
-        with open(tags_file, "w") as f:
-            json.dump({
-                "tags": {k: list(v) for k, v in self.tags_index.items()},
-                "groups": {k: list(v) for k, v in self.groups_index.items()},
-            }, f, indent=2, ensure_ascii=False)
+        with _file_lock(tags_file, mode="w"):
+            with NamedTemporaryFile("w", delete=False, dir=self.session_dir, encoding="utf-8") as tmp:
+                json.dump({
+                    "tags": {k: list(v) for k, v in self.tags_index.items()},
+                    "groups": {k: list(v) for k, v in self.groups_index.items()},
+                }, tmp, indent=2, ensure_ascii=False)
+                tmp_path = Path(tmp.name)
+            tmp_path.replace(tags_file)
 
     def _session_file(self, session_id: str) -> Path:
-        return SESSION_DIR / f"{session_id}.jsonl"
+        return self.session_dir / f"{session_id}.jsonl"
 
     # ---- Basic CRUD ----
 
@@ -202,7 +230,7 @@ class SessionManager:
             group_set.discard(session_id)
 
         del self.sessions[session_id]
-        self._save_index()
+        self._save_index(merge=False)
         self._save_tags()
 
         if self.current_session == session_id:
