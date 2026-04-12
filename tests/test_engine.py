@@ -188,8 +188,7 @@ def test_query_engine_retry_config():
     assert engine_default.retry_delay == 1.0
 
 
-@pytest.mark.asyncio
-async def test_query_engine_run():
+def test_query_engine_run():
     """Test QueryEngine run method (basic functionality)."""
     # This test mocks the OpenAI client to avoid actual API calls
     with patch('h_agent.core.engine.OpenAI') as mock_openai_class:
@@ -229,6 +228,5 @@ if __name__ == "__main__":
     test_token_counter_count_text()
     test_query_engine_get_usage()
     test_query_engine_reset_usage()
-    import asyncio
-    asyncio.run(test_query_engine_run())
+    test_query_engine_run()
     print("All engine tests passed!")

@@ -1255,107 +1255,24 @@ def cmd_run(args) -> int:
 
 
 def cmd_chat(args) -> int:
-    """Handle chat command - interactive mode."""
-    from openai import OpenAI
+    """Handle chat command - interactive mode via the new CLI shell."""
+    from h_agent.cli.repl import run_repl
 
     session_id = args.session
     mgr = get_session_manager()
 
     if session_id:
         found_id = _find_session(mgr, session_id)
-        if not found_id:
-            _err(f"Session not found: {session_id}")
-            return 1
-        session_id = found_id
-        mgr.set_current(session_id)
-    else:
-        if not mgr.get_current():
-            session = mgr.create_session("chat")
-            session_id = session["session_id"]
-        else:
-            session_id = mgr.get_current()
-    mgr.set_current(session_id)
+        if found_id:
+            session_id = found_id
 
-    print(f"\033[36mh_agent - Chat Mode\033[0m")
-    print(f"Session: {session_id}")
-    print(f"Model: {MODEL}")
-    print(f"Type 'q', 'exit' or press Enter to quit")
-    print("=" * 50)
-
-    messages = mgr.get_history(session_id)
-
-    client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     system_prompt = f"You are a helpful AI assistant. Current directory: {os.getcwd()}"
-
-    while True:
-        try:
-            query = input("\n\033[36m>> \033[0m").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nGoodbye!")
-            break
-
-        if query.lower() in ("q", "exit", ""):
-            print("Goodbye!")
-            break
-
-        if query.lower() == "/clear":
-            messages = []
-            print("History cleared")
-            continue
-
-        if query.lower() == "/history":
-            print(f"Messages so far: {len(mgr.get_history(session_id))}")
-            continue
-
-        messages.append({"role": "user", "content": query})
-        mgr.add_message(session_id, "user", query)
-        api_messages = [{"role": "system", "content": system_prompt}] + messages
-
-        try:
-            while True:
-                response = client.chat.completions.create(
-                    model=MODEL,
-                    messages=api_messages,
-                    tools=TOOLS,
-                    tool_choice="auto",
-                    max_tokens=4096,
-                )
-
-                message = response.choices[0].message
-                messages.append({
-                    "role": "assistant",
-                    "content": message.content,
-                    "tool_calls": message.tool_calls,
-                })
-
-                if not message.tool_calls:
-                    if message.content:
-                        print(f"\n{message.content}")
-                        mgr.add_message(session_id, "assistant", message.content)
-                    break
-
-                for tool_call in message.tool_calls:
-                    args_dict = json.loads(tool_call.function.arguments)
-                    key = list(args_dict.keys())[0] if args_dict else ""
-                    val = args_dict.get(key, "")[:60] if key else ""
-                    print(f"\n\033[33m$ {tool_call.function.name}({val})\033[0m", file=sys.stderr)
-                    result = execute_tool_call(tool_call)
-                    print(f"\033[90m{result[:500]}{'...' if len(result) > 500 else ''}\033[0m", file=sys.stderr)
-                    if len(result) > 50000:
-                        result = result[:25000] + "\n...[truncated]\n" + result[-25000:]
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result,
-                    })
-                    mgr.add_message(session_id, "tool", f"[{tool_call.function.name}] {result}")
-
-                api_messages = [{"role": "system", "content": system_prompt}] + messages
-
-        except Exception as e:
-            _err(_format_api_error(e))
-
-    return 0
+    return run_repl(
+        prompt=None,
+        model=MODEL,
+        system_prompt=system_prompt,
+        session_id=session_id,
+    )
 
 
 def cmd_doctor(args) -> int:

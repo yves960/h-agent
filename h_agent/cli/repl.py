@@ -1,8 +1,8 @@
 """
-h_agent/cli/repl.py - REPL Loop
+h_agent/cli/repl.py - REPL entrypoints.
 
-Interactive Read-Eval-Print loop for h-agent.
-Inspired by Claude Code's REPL implementation.
+The legacy REPL implementation remains available in this module, but the public
+entrypoints now prefer the new stateful CliApp shell.
 """
 
 from __future__ import annotations
@@ -401,33 +401,46 @@ async def run_repl_async(
     model: str = "gpt-4o",
     system_prompt: Optional[str] = None,
     tools: Optional[List[dict]] = None,
+    session_id: Optional[str] = None,
 ):
-    """Run REPL asynchronously."""
-    from h_agent.core.engine import QueryEngine
-    from h_agent.tools import get_registry as get_tool_registry
-    
-    registry = get_tool_registry()
-    tool_schemas = registry.get_tool_schemas()
-    
-    engine = QueryEngine(
-        model=model,
-        tools=tool_schemas,
-        system_prompt=system_prompt,
-        tool_registry=registry,
-    )
-    
-    repl = REPL(
-        engine=engine,
-        system_prompt=system_prompt,
-    )
-    
-    repl.run(initial_prompt=prompt)
+    """Run the preferred interactive CLI shell, with legacy fallback."""
+    try:
+        from h_agent.cli.app import CliApp
+
+        app = CliApp(
+            model=model,
+            system_prompt=system_prompt,
+            session_id=session_id,
+        )
+        return await app.run_async(initial_prompt=prompt)
+    except ImportError:
+        from h_agent.core.engine import QueryEngine
+        from h_agent.tools import get_registry as get_tool_registry
+
+        registry = get_tool_registry()
+        tool_schemas = registry.get_tool_schemas()
+
+        engine = QueryEngine(
+            model=model,
+            tools=tool_schemas,
+            system_prompt=system_prompt,
+            tool_registry=registry,
+        )
+
+        repl = REPL(
+            engine=engine,
+            system_prompt=system_prompt,
+        )
+
+        repl.run(initial_prompt=prompt)
+        return 0
 
 
 def run_repl(
     prompt: Optional[str] = None,
     model: str = "gpt-4o",
     system_prompt: Optional[str] = None,
+    session_id: Optional[str] = None,
 ):
     """Run REPL synchronously."""
-    asyncio.run(run_repl_async(prompt, model, system_prompt))
+    return asyncio.run(run_repl_async(prompt, model, system_prompt, session_id=session_id))
