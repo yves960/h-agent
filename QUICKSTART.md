@@ -38,7 +38,7 @@ h-agent run "帮我概览当前项目"
 python -m h_agent chat
 ```
 
-输入你的问题，按回车发送。输入 `q` 退出。
+输入你的问题，按回车发送。退出请使用 `Ctrl+C` 或 `/exit`。
 
 如果只是安装发布版，也可以使用：
 
@@ -69,14 +69,15 @@ pip install h-agent
 
 ---
 
-## 💬 对话模式技巧
+## 💬 对话界面技巧
 
-### 切换会话
+### 常用交互
 
 ```
->> /clear          # 清空当前对话历史
->> /history        # 查看消息数量
->> q              # 退出
+Tab               # 补全 slash 命令
+Up / Down         # 浏览本地输入历史
+F1                # 打开帮助覆盖层
+Ctrl+C / /exit    # 退出 chat
 ```
 
 推荐优先使用 `h-agent chat`，而不是省略子命令的裸入口，这样和 `run`、`session`、`config` 的命令风格一致。

@@ -28,7 +28,7 @@ h-agent init --quick           # 快速配置（最小化提示）
 
 ### h-agent (无参数)
 
-默认启动交互式聊天模式，等价于 `h-agent chat`。
+默认进入主 CLI。为了减少歧义，文档推荐显式写成 `h-agent chat`、`h-agent run`、`h-agent session ...`。
 
 ```bash
 h-agent
@@ -102,17 +102,22 @@ h-agent autostart status            # 查看状态
 
 ### h-agent chat
 
-交互式聊天模式。
+交互式聊天模式，启动新的全屏 CLI 界面。
 
 ```bash
 h-agent chat                          # 使用默认会话
 h-agent chat --session my-session    # 使用指定会话
 ```
 
-**聊天内命令**：
-- `/clear` — 清空当前对话历史
-- `/history` — 查看消息数量
-- `q` / `exit` / 空行 — 退出
+**主要交互**：
+- `Tab` — 补全 slash 命令
+- `Up` / `Down` — 浏览本地输入历史
+- `F1` — 打开帮助覆盖层
+- `Ctrl+C` 或 `/exit` — 退出
+
+**推荐做法**：
+- 用 `h-agent session list/history/create` 管理会话
+- 用 `h-agent chat --session <name>` 进入指定会话
 
 ### h-agent run
 

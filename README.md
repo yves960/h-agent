@@ -193,19 +193,28 @@ h-agent run --session my "解释这段代码"
 
 ### h-agent chat
 
-交互式对话模式。
+交互式对话模式，启动新的全屏 CLI 界面。
 
 ```bash
 h-agent chat           # 使用默认会话
 h-agent chat --session my  # 使用指定会话
 ```
 
-聊天模式支持以下命令：
-- `/clear` - 清空历史
-- `/history` - 查看消息数量
-- `/sessions` - 列出所有保存的会话
-- `/resume [id]` - 恢复指定会话（或最新会话）
-- `q` / `exit` / 空行 - 退出
+新的 `chat` 界面支持：
+- 底部状态栏、消息区、命令建议区和权限提示区
+- `Up` / `Down` 浏览本地输入历史
+- `Tab` 补全 slash 命令
+- `F1` 打开帮助覆盖层
+- `Ctrl+C` 或 `/exit` 退出
+
+推荐把会话管理放到 CLI 子命令里做，例如：
+
+```bash
+h-agent session list
+h-agent session history my-session
+h-agent session create --name review
+h-agent chat --session review
+```
 
 > 💡 **会话持久化**：h-agent 自动保存每次对话到 `~/.h-agent/sessions/`，重启后可使用 `/resume` 恢复上下文。
 
@@ -295,19 +304,19 @@ h-agent 提供丰富的内置工具，Agent 可自动调用。
 
 ---
 
-## REPL 命令参考
+## 交互界面命令参考
 
-在交互式对话模式中，可以使用以下斜杠命令：
+在新的 `h-agent chat` 全屏界面中，可以使用以下常用斜杠命令：
 
 ### 核心命令
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | `/help [command]` | 显示帮助信息 | `/help memory` |
-| `/exit` / `/quit` | 退出 REPL | `/exit` |
-| `/clear` | 清空对话历史 | `/clear` |
-| `/history` | 显示历史记录 | `/history` |
+| `/exit` / `/quit` | 退出 chat 界面 | `/exit` |
 | `/status` | 显示会话状态 | `/status` |
+| `/sessions` | 列出会话 | `/sessions` |
+| `/resume [id]` | 恢复会话 | `/resume sess-1234` |
 
 ### 信息命令
 
@@ -366,11 +375,11 @@ h-agent 提供丰富的内置工具，Agent 可自动调用。
 | 快捷键 | 功能 |
 |--------|------|
 | `Ctrl+C` | 中断当前操作 |
-| `Ctrl+D` | 退出 REPL |
+| `Ctrl+C` | 退出 chat 界面 |
 | `Ctrl+L` | 清屏 |
-| `Ctrl+R` | 重试 |
 | `Tab` | 自动补全 |
 | `↑/↓` | 历史记录导航 |
+| `F1` | 打开帮助覆盖层 |
 
 ---
 
@@ -584,9 +593,9 @@ h-agent 支持推理模型的思考过程显示，如 DeepSeek Reasoner。
 - `deepseek-reasoner` - DeepSeek 推理模型
 - 其他输出 `reasoning_content` 的模型
 
-### REPL 显示
+### 交互界面显示
 
-思考内容在 REPL 中以灰色显示：
+思考内容在交互界面中以灰色显示：
 
 ```
 [User]
@@ -762,9 +771,9 @@ h-agent/
 │   │
 │   ├── cli/                     # CLI入口
 │   │   ├── commands.py          # CLI命令
-│   │   └── repl.py              # 交互式REPL
+│   │   └── repl.py              # 交互入口兼容层
 │   │
-│   ├── commands/                # REPL命令系统（30+命令）
+│   ├── commands/                # slash 命令系统（30+命令）
 │   │   ├── base.py              # 命令基类
 │   │   ├── registry.py          # 命令注册表
 │   │   ├── help.py              # /help

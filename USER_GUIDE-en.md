@@ -174,10 +174,20 @@ h-agent supports multiple chat modes:
 - **Single Command**: `h-agent run "task description"` - Exits after execution
 - **Web UI**: `h-agent web` - Graphical interface
 
-In chat mode, special commands are supported:
-- `/clear` - Clear current session history
-- `/history` - Show message count and token usage
-- `q` / `exit` - Exit chat
+In the new chat UI, prefer these interactions:
+- `Tab` - complete slash commands
+- `Up` / `Down` - browse local input history
+- `F1` - open the lightweight help overlay
+- `Ctrl+C` or `/exit` - leave chat
+
+Use explicit CLI commands for session cleanup, inspection, and switching:
+
+```bash
+h-agent session list
+h-agent session history my-session
+h-agent session create --name project-x
+h-agent chat --session project-x
+```
 
 #### Session Management
 Sessions are persistent conversation contexts:
@@ -894,7 +904,7 @@ You're a Vim user and want familiar Vim keybindings in h-agent.
 h-agent supports three Vim states:
 - **Normal mode**: Default state, execute Vim commands
 - **Insert mode**: Input text
-- **Command mode**: Execute REPL commands
+- **Command mode**: Execute slash commands
 
 #### Keybindings
 Normal mode common keys:
@@ -1209,8 +1219,8 @@ Dependencies: flask, websocket
 |---------|-------------|
 | `/help [command]` | Show help |
 | `/exit` | Exit |
-| `/clear` | Clear history |
-| `/history` | Show history |
+| `/sessions` | List sessions |
+| `/resume [id]` | Resume session |
 | `/status` | Session status |
 
 ### Agent Commands

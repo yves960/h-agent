@@ -198,10 +198,20 @@ h-agent 支持多种对话模式：
 - **单次命令**: `h-agent run "任务描述"` - 执行后退出
 - **Web UI**: `h-agent web` - 图形界面
 
-在聊天模式中，支持特殊命令：
-- `/clear` - 清空当前会话历史
-- `/history` - 显示消息数量和 token 使用情况
-- `q` / `exit` - 退出聊天
+在新的聊天界面中，优先使用这些交互方式：
+- `Tab` - 补全 slash 命令
+- `Up` / `Down` - 浏览本地输入历史
+- `F1` - 打开帮助覆盖层
+- `Ctrl+C` 或 `/exit` - 退出聊天
+
+会话清理、历史查看和切换建议使用显式 CLI 命令：
+
+```bash
+h-agent session list
+h-agent session history my-session
+h-agent session create --name project-x
+h-agent chat --session project-x
+```
 
 #### 会话管理
 会话是持久化的对话上下文：
@@ -918,7 +928,7 @@ $ /buddy show
 h-agent支持三种Vim状态：
 - **Normal模式**: 默认状态，可执行Vim命令
 - **Insert模式**: 输入文本
-- **Command模式**: 执行REPL命令
+- **Command模式**: 执行 slash 命令
 
 #### 键绑定
 Normal模式常用键：
@@ -1233,8 +1243,8 @@ $ /plugin info web-ui
 |------|------|
 | `/help [command]` | 显示帮助 |
 | `/exit` | 退出 |
-| `/clear` | 清空历史 |
-| `/history` | 显示历史 |
+| `/sessions` | 列出会话 |
+| `/resume [id]` | 恢复会话 |
 | `/status` | 会话状态 |
 
 ### Agent命令

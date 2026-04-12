@@ -28,7 +28,7 @@ h-agent init --quick           # Quick setup (minimal prompts)
 
 ### h-agent (no arguments)
 
-Default to interactive chat mode, equivalent to `h-agent chat`.
+Default to the main CLI. For clarity, the docs prefer explicit forms such as `h-agent chat`, `h-agent run`, and `h-agent session ...`.
 
 ```bash
 h-agent
@@ -102,17 +102,22 @@ h-agent autostart status            # View status
 
 ### h-agent chat
 
-Interactive chat mode.
+Interactive chat mode with the new full-screen CLI shell.
 
 ```bash
 h-agent chat                          # Use default session
 h-agent chat --session my-session    # Use specified session
 ```
 
-**In-chat commands**:
-- `/clear` — Clear current conversation history
-- `/history` — View message count
-- `q` / `exit` / empty line — Exit
+**Primary interactions**:
+- `Tab` — complete slash commands
+- `Up` / `Down` — browse local input history
+- `F1` — toggle the help overlay
+- `Ctrl+C` or `/exit` — exit chat
+
+**Recommended workflow**:
+- use `h-agent session list/history/create` for session management
+- use `h-agent chat --session <name>` to enter a specific session
 
 ### h-agent run
 

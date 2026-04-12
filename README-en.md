@@ -193,17 +193,28 @@ h-agent run --session my "Explain this code"
 
 ### h-agent chat
 
-Interactive chat mode.
+Interactive chat mode with the new full-screen CLI shell.
 
 ```bash
 h-agent chat           # Use default session
 h-agent chat --session my  # Use specified session
 ```
 
-Chat mode supports the following commands:
-- `/clear` - Clear history
-- `/history` - View message count
-- `q` / `exit` / empty line - Exit
+The new `chat` UI includes:
+- a status bar, transcript pane, command suggestion pane, and permission pane
+- `Up` / `Down` for local input history
+- `Tab` for slash-command completion
+- `F1` for the lightweight help overlay
+- `Ctrl+C` or `/exit` to leave the session
+
+Prefer using dedicated session commands for session management:
+
+```bash
+h-agent session list
+h-agent session history my-session
+h-agent session create --name review
+h-agent chat --session review
+```
 
 ### h-agent config
 
@@ -550,9 +561,9 @@ h-agent/
 │   │
 │   ├── cli/                     # CLI entry point
 │   │   ├── commands.py          # CLI commands
-│   │   └and repl.py              # Interactive REPL
+│   │   └and repl.py              # Interactive entry compatibility layer
 │   │
-│   ├── commands/                # REPL commands (30+)
+│   ├── commands/                # Slash commands (30+)
 │   │   ├── base.py              # Command base
 │   │   ├── registry.py          # Command registry
 │   │   ├── help.py              # /help

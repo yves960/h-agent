@@ -243,7 +243,7 @@ h-agent chat
 Expected:
 
 - `run` produces a model answer or a well-classified error
-- `chat` opens a REPL, preserves history, and allows `/history` and `/clear`
+- `chat` opens the new full-screen CLI shell, preserves history, and supports slash completion, local input history, and clean exit via `Ctrl+C` or `/exit`
 
 Failure-path acceptance:
 

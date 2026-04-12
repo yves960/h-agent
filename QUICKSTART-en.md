@@ -38,7 +38,7 @@ h-agent run "Give me an overview of this project"
 python -m h_agent chat
 ```
 
-Type your question and press Enter to send. Type `q` to exit.
+Type your question and press Enter to send. Leave the session with `Ctrl+C` or `/exit`.
 
 If you only need the published package, you can also use:
 
@@ -69,14 +69,15 @@ pip install h-agent
 
 ---
 
-## Chat Mode Tips
+## Chat UI Tips
 
-### Switch Sessions
+### Common Interactions
 
 ```
->> /clear          # Clear current chat history
->> /history        # View message count
->> q              # Exit
+Tab               # Complete slash commands
+Up / Down         # Browse local input history
+F1                # Toggle the help overlay
+Ctrl+C / /exit    # Exit chat
 ```
 
 Prefer `h-agent chat` over the bare entrypoint so it stays consistent with `run`, `session`, and `config`.
